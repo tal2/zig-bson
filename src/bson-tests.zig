@@ -6,6 +6,7 @@ const colors = @import("colors.zig");
 const bson_types = @import("bson-types.zig");
 const bson = @import("bson.zig");
 const BsonDocument = bson.BsonDocument;
+const ExtJsonSerializer = @import("ext-json-serializer.zig");
 
 const testing = std.testing;
 const Allocator = std.mem.Allocator;
@@ -22,6 +23,7 @@ const BsonTimestamp = bson_types.BsonTimestamp;
 const BsonRegexpOptions = bson_types.RegexpOptions;
 
 const JsonParsingRegExpError = bson.JsonParsingRegExpError;
+const WriteJsonStringError = ExtJsonSerializer.WriteJsonStringError;
 
 test "hello world example from bson spec" {
     var arena = std.heap.ArenaAllocator.init(testing.allocator);
@@ -56,7 +58,7 @@ test "hello world example from bson spec" {
         [_]u8{0};
     try testing.expectEqualSlices(u8, &expected_data, bson_document.raw_data);
 
-    const json_string = try bson_document.toJsonString(arena_allocator, false);
+    const json_string = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, false);
     defer arena_allocator.free(json_string);
 
     try testing.expectEqualSlices(u8, "{\"hello\":\"world\"}", json_string);
@@ -92,7 +94,7 @@ test "hello world to bson with int32" {
 
     try testing.expectEqualSlices(u8, &expected_data, bson_document.raw_data);
 
-    const json_string = try bson_document.toJsonString(arena_allocator, false);
+    const json_string = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, false);
     defer arena_allocator.free(json_string);
 
     try testing.expectEqualSlices(u8, "{\"num\":42}", json_string);
@@ -128,7 +130,7 @@ test "write bson with int16 (coerced to int32)" {
 
     try testing.expectEqualSlices(u8, &expected_data, bson_document.raw_data);
 
-    const json_string = try bson_document.toJsonString(arena_allocator, false);
+    const json_string = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, false);
     defer arena_allocator.free(json_string);
 
     try testing.expectEqualSlices(u8, "{\"num\":42}", json_string);
@@ -164,7 +166,7 @@ test "write bson with int64" {
 
     try testing.expectEqualSlices(u8, &expected_data, bson_document.raw_data);
 
-    const json_string = try bson_document.toJsonString(arena_allocator, false);
+    const json_string = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, false);
     defer arena_allocator.free(json_string);
 
     try testing.expectEqualSlices(u8, "{\"num\":42}", json_string);
@@ -221,7 +223,7 @@ test "write bson with sub document" {
 
     try testing.expectEqualSlices(u8, &expected_data, bson_document.raw_data);
 
-    const json_string = try bson_document.toJsonString(arena_allocator, false);
+    const json_string = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, false);
     defer arena_allocator.free(json_string);
 
     try testing.expectEqualSlices(u8, "{\"sub_document\":{\"name\":\"child\"}}", json_string);
@@ -257,7 +259,7 @@ test "write bson with sub document" {
 
 //     try testing.expectEqualSlices(u8, &expected_data, bson_document.raw_data);
 
-//     const json_string = try bson_document.toJsonString(arena_allocator, false);
+//     const json_string = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, false);
 //     defer arena_allocator.free(json_string);
 
 //     try testing.expectEqualSlices(u8, "{\"num\":{\"$numberDecimal\":\"42\"}}", json_string);
@@ -291,7 +293,7 @@ test "write bson with null value" {
 
     try testing.expectEqualSlices(u8, &expected_data, bson_document.raw_data);
 
-    const json_string = try bson_document.toJsonString(arena_allocator, false);
+    const json_string = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, false);
     defer arena_allocator.free(json_string);
 
     try testing.expectEqualSlices(u8, "{\"num\":null}", json_string);
@@ -394,12 +396,12 @@ test "write bson to json with int32 value in range - /bson-corpus/tests/int32.js
 
     try testing.expectEqualSlices(u8, &expected_data, bson_document.raw_data);
 
-    const json_string = try bson_document.toJsonString(arena_allocator, false);
+    const json_string = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, false);
     defer arena_allocator.free(json_string);
 
     try testing.expectEqualSlices(u8, "{\"i\":1}", json_string);
 
-    const extjson_string = try bson_document.toJsonString(arena_allocator, true);
+    const extjson_string = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, true);
     defer arena_allocator.free(extjson_string);
 
     try testing.expectEqualSlices(u8, "{\"i\":{\"$numberInt\":\"1\"}}", extjson_string);
@@ -435,7 +437,7 @@ test "write bson to json with int32 min value - /bson-corpus/tests/int32.json" {
 
     try testing.expectEqualSlices(u8, &expected_data, bson_document.raw_data);
 
-    const json_string = try bson_document.toJsonString(arena_allocator, false);
+    const json_string = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, false);
     defer arena_allocator.free(json_string);
     try testing.expectEqualSlices(u8, "{\"i\":-2147483648}", json_string);
 
@@ -443,7 +445,7 @@ test "write bson to json with int32 min value - /bson-corpus/tests/int32.json" {
     defer arena_allocator.destroy(bson_document_from_json);
     try testing.expectEqualSlices(u8, &expected_data, bson_document_from_json.raw_data);
 
-    const extjson_string = try bson_document.toJsonString(arena_allocator, true);
+    const extjson_string = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, true);
     defer arena_allocator.free(extjson_string);
     try testing.expectEqualSlices(u8, "{\"i\":{\"$numberInt\":\"-2147483648\"}}", extjson_string);
 
@@ -482,12 +484,12 @@ test "write bson to json with int32 max value - /bson-corpus/tests/int32.json" {
 
     try testing.expectEqualSlices(u8, &expected_data, bson_document.raw_data);
 
-    const json_string = try bson_document.toJsonString(arena_allocator, false);
+    const json_string = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, false);
     defer arena_allocator.free(json_string);
 
     try testing.expectEqualSlices(u8, "{\"i\":2147483647}", json_string);
 
-    const extjson_string = try bson_document.toJsonString(arena_allocator, true);
+    const extjson_string = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, true);
     defer arena_allocator.free(extjson_string);
 
     try testing.expectEqualSlices(u8, "{\"i\":{\"$numberInt\":\"2147483647\"}}", extjson_string);
@@ -523,12 +525,12 @@ test "write bson to json with int64 min value - /bson-corpus/tests/int64.json" {
 
     try testing.expectEqualSlices(u8, &expected_data, bson_document.raw_data);
 
-    const json_string = try bson_document.toJsonString(arena_allocator, false);
+    const json_string = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, false);
     defer arena_allocator.free(json_string);
 
     try testing.expectEqualSlices(u8, "{\"i\":-9223372036854775808}", json_string);
 
-    const extjson_string = try bson_document.toJsonString(arena_allocator, true);
+    const extjson_string = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, true);
     defer arena_allocator.free(extjson_string);
 
     try testing.expectEqualSlices(u8, "{\"i\":{\"$numberLong\":\"-9223372036854775808\"}}", extjson_string);
@@ -564,12 +566,12 @@ test "write bson to json with int64 max value - /bson-corpus/tests/int64.json" {
 
     try testing.expectEqualSlices(u8, &expected_data, bson_document.raw_data);
 
-    const json_string = try bson_document.toJsonString(arena_allocator, false);
+    const json_string = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, false);
     defer arena_allocator.free(json_string);
 
     try testing.expectEqualSlices(u8, "{\"i\":9223372036854775807}", json_string);
 
-    const extjson_string = try bson_document.toJsonString(arena_allocator, true);
+    const extjson_string = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, true);
     defer arena_allocator.free(extjson_string);
 
     try testing.expectEqualSlices(u8, "{\"i\":{\"$numberLong\":\"9223372036854775807\"}}", extjson_string);
@@ -605,12 +607,12 @@ test "write bson to json with int64 value: 0 - /bson-corpus/tests/int64.json" {
 
     try testing.expectEqualSlices(u8, &expected_data, bson_document.raw_data);
 
-    const json_string = try bson_document.toJsonString(arena_allocator, false);
+    const json_string = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, false);
     defer arena_allocator.free(json_string);
 
     try testing.expectEqualSlices(u8, "{\"i\":0}", json_string);
 
-    const extjson_string = try bson_document.toJsonString(arena_allocator, true);
+    const extjson_string = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, true);
     defer arena_allocator.free(extjson_string);
 
     try testing.expectEqualSlices(u8, "{\"i\":{\"$numberLong\":\"0\"}}", extjson_string);
@@ -646,12 +648,12 @@ test "write bson to json with int64 value: 1 - /bson-corpus/tests/int64.json" {
 
     try testing.expectEqualSlices(u8, &expected_data, bson_document.raw_data);
 
-    const json_string = try bson_document.toJsonString(arena_allocator, false);
+    const json_string = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, false);
     defer arena_allocator.free(json_string);
 
     try testing.expectEqualSlices(u8, "{\"a\":1}", json_string);
 
-    const extjson_string = try bson_document.toJsonString(arena_allocator, true);
+    const extjson_string = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, true);
     defer arena_allocator.free(extjson_string);
 
     try testing.expectEqualSlices(u8, "{\"a\":{\"$numberLong\":\"1\"}}", extjson_string);
@@ -687,12 +689,12 @@ test "write bson to json with boolean value: true - /bson-corpus/tests/boolean.j
 
     try testing.expectEqualSlices(u8, &expected_data, bson_document.raw_data);
 
-    const json_string = try bson_document.toJsonString(arena_allocator, false);
+    const json_string = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, false);
     defer arena_allocator.free(json_string);
 
     try testing.expectEqualSlices(u8, "{\"b\":true}", json_string);
 
-    const extjson_string = try bson_document.toJsonString(arena_allocator, true);
+    const extjson_string = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, true);
     defer arena_allocator.free(extjson_string);
 
     try testing.expectEqualSlices(u8, "{\"b\":true}", extjson_string);
@@ -728,12 +730,12 @@ test "write bson to json with boolean value: false - /bson-corpus/tests/boolean.
 
     try testing.expectEqualSlices(u8, &expected_data, bson_document.raw_data);
 
-    const json_string = try bson_document.toJsonString(arena_allocator, false);
+    const json_string = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, false);
     defer arena_allocator.free(json_string);
 
     try testing.expectEqualSlices(u8, "{\"b\":false}", json_string);
 
-    const extjson_string = try bson_document.toJsonString(arena_allocator, true);
+    const extjson_string = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, true);
     defer arena_allocator.free(extjson_string);
 
     try testing.expectEqualSlices(u8, "{\"b\":false}", extjson_string);
@@ -773,9 +775,9 @@ test "write bson to json with binary subtype 0x00 (Zero-length) - /bson-corpus/t
 
     try testing.expectEqualSlices(u8, &expected_data, bson_document.raw_data);
 
-    try testing.expectError(BsonDocument.WriteJsonStringError.BinaryFieldRequiresStrictExtJson, bson_document.toJsonString(arena_allocator, false));
+    try testing.expectError(WriteJsonStringError.BinaryFieldRequiresStrictExtJson, ExtJsonSerializer.toJsonString(bson_document, arena_allocator, false));
 
-    const extjson_string = try bson_document.toJsonString(arena_allocator, true);
+    const extjson_string = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, true);
     defer arena_allocator.free(extjson_string);
 
     try testing.expectEqualSlices(u8, "{\"x\":{\"$binary\":{\"base64\":\"\",\"subType\":\"00\"}}}", extjson_string);
@@ -815,9 +817,9 @@ test "write bson to json with binary subtype 0x00 - /bson-corpus/tests/binary.js
 
     try testing.expectEqualSlices(u8, &expected_data, bson_document.raw_data);
 
-    try testing.expectError(BsonDocument.WriteJsonStringError.BinaryFieldRequiresStrictExtJson, bson_document.toJsonString(arena_allocator, false));
+    try testing.expectError(ExtJsonSerializer.WriteJsonStringError.BinaryFieldRequiresStrictExtJson, ExtJsonSerializer.toJsonString(bson_document, arena_allocator, false));
 
-    const extjson_string = try bson_document.toJsonString(arena_allocator, true);
+    const extjson_string = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, true);
     defer arena_allocator.free(extjson_string);
 
     try testing.expectEqualSlices(u8, "{\"x\":{\"$binary\":{\"base64\":\"//8=\",\"subType\":\"00\"}}}", extjson_string);
@@ -857,9 +859,9 @@ test "write bson to json with binary subtype 0x01 - /bson-corpus/tests/binary.js
 
     try testing.expectEqualSlices(u8, &expected_data, bson_document.raw_data);
 
-    try testing.expectError(BsonDocument.WriteJsonStringError.BinaryFieldRequiresStrictExtJson, bson_document.toJsonString(arena_allocator, false));
+    try testing.expectError(ExtJsonSerializer.WriteJsonStringError.BinaryFieldRequiresStrictExtJson, ExtJsonSerializer.toJsonString(bson_document, arena_allocator, false));
 
-    const extjson_string = try bson_document.toJsonString(arena_allocator, true);
+    const extjson_string = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, true);
     defer arena_allocator.free(extjson_string);
 
     try testing.expectEqualSlices(u8, "{\"x\":{\"$binary\":{\"base64\":\"//8=\",\"subType\":\"01\"}}}", extjson_string);
@@ -901,9 +903,9 @@ test "write bson to json with binary subtype 0x02 - /bson-corpus/tests/binary.js
 
     try testing.expectEqualSlices(u8, &expected_data, bson_document.raw_data);
 
-    try testing.expectError(BsonDocument.WriteJsonStringError.BinaryFieldRequiresStrictExtJson, bson_document.toJsonString(arena_allocator, false));
+    try testing.expectError(WriteJsonStringError.BinaryFieldRequiresStrictExtJson, ExtJsonSerializer.toJsonString(bson_document, arena_allocator, false));
 
-    const extjson_string = try bson_document.toJsonString(arena_allocator, true);
+    const extjson_string = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, true);
     defer arena_allocator.free(extjson_string);
 
     try testing.expectEqualSlices(u8, "{\"x\":{\"$binary\":{\"base64\":\"//8=\",\"subType\":\"02\"}}}", extjson_string);
@@ -943,9 +945,9 @@ test "write bson to json with binary subtype 0x03 - /bson-corpus/tests/binary.js
 
     try testing.expectEqualSlices(u8, &expected_data, bson_document.raw_data);
 
-    try testing.expectError(BsonDocument.WriteJsonStringError.BinaryFieldRequiresStrictExtJson, bson_document.toJsonString(arena_allocator, false));
+    try testing.expectError(ExtJsonSerializer.WriteJsonStringError.BinaryFieldRequiresStrictExtJson, ExtJsonSerializer.toJsonString(bson_document, arena_allocator, false));
 
-    const extjson_string = try bson_document.toJsonString(arena_allocator, true);
+    const extjson_string = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, true);
     defer arena_allocator.free(extjson_string);
 
     try testing.expectEqualSlices(u8, "{\"x\":{\"$binary\":{\"base64\":\"c//SZESzTGmQ6OfR38A11A==\",\"subType\":\"03\"}}}", extjson_string);
@@ -985,9 +987,9 @@ test "write bson to json with binary subtype 0x04 - /bson-corpus/tests/binary.js
 
     try testing.expectEqualSlices(u8, &expected_data, bson_document.raw_data);
 
-    try testing.expectError(BsonDocument.WriteJsonStringError.BinaryFieldRequiresStrictExtJson, bson_document.toJsonString(arena_allocator, false));
+    try testing.expectError(ExtJsonSerializer.WriteJsonStringError.BinaryFieldRequiresStrictExtJson, ExtJsonSerializer.toJsonString(bson_document, arena_allocator, false));
 
-    const extjson_string = try bson_document.toJsonString(arena_allocator, true);
+    const extjson_string = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, true);
     defer arena_allocator.free(extjson_string);
 
     try testing.expectEqualSlices(u8, "{\"x\":{\"$binary\":{\"base64\":\"c//SZESzTGmQ6OfR38A11A==\",\"subType\":\"04\"}}}", extjson_string);
@@ -1027,9 +1029,9 @@ test "write bson to json with binary subtype 0x80 - /bson-corpus/tests/binary.js
 
     try testing.expectEqualSlices(u8, &expected_data, bson_document.raw_data);
 
-    try testing.expectError(BsonDocument.WriteJsonStringError.BinaryFieldRequiresStrictExtJson, bson_document.toJsonString(arena_allocator, false));
+    try testing.expectError(ExtJsonSerializer.WriteJsonStringError.BinaryFieldRequiresStrictExtJson, ExtJsonSerializer.toJsonString(bson_document, arena_allocator, false));
 
-    const extjson_string = try bson_document.toJsonString(arena_allocator, true);
+    const extjson_string = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, true);
     defer arena_allocator.free(extjson_string);
 
     try testing.expectEqualSlices(u8, "{\"x\":{\"$binary\":{\"base64\":\"c//SZESzTGmQ6OfR38A11A==\",\"subType\":\"80\"}}}", extjson_string);
@@ -1065,10 +1067,10 @@ test "write bson to json with datetime: epoch - /bson-corpus/tests/datetime.json
 
     try testing.expectEqualSlices(u8, &expected_data, bson_document.raw_data);
 
-    const relaxed_json_data = try bson_document.toJsonString(arena_allocator, false);
+    const relaxed_json_data = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, false);
     try testing.expectEqualSlices(u8, "{\"a\":{\"$date\":\"1970-01-01T00:00:00Z\"}}", relaxed_json_data);
 
-    const extjson_string = try bson_document.toJsonString(arena_allocator, true);
+    const extjson_string = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, true);
     defer arena_allocator.free(extjson_string);
 
     try testing.expectEqualSlices(u8, "{\"a\":{\"$date\":{\"$numberLong\":\"0\"}}}", extjson_string);
@@ -1104,10 +1106,10 @@ test "write bson to json with datetime: positive ms - /bson-corpus/tests/datetim
 
     try testing.expectEqualSlices(u8, &expected_data, bson_document.raw_data);
 
-    const relaxed_json_data = try bson_document.toJsonString(arena_allocator, false);
+    const relaxed_json_data = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, false);
     try testing.expectEqualSlices(u8, "{\"a\":{\"$date\":\"2012-12-24T12:15:30.501Z\"}}", relaxed_json_data);
 
-    const extjson_string = try bson_document.toJsonString(arena_allocator, true);
+    const extjson_string = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, true);
     defer arena_allocator.free(extjson_string);
 
     try testing.expectEqualSlices(u8, "{\"a\":{\"$date\":{\"$numberLong\":\"1356351330501\"}}}", extjson_string);
@@ -1143,10 +1145,10 @@ test "write bson to json with datetime: negative ms - /bson-corpus/tests/datetim
 
     try testing.expectEqualSlices(u8, &expected_data, bson_document.raw_data);
 
-    const relaxed_json_data = try bson_document.toJsonString(arena_allocator, false);
+    const relaxed_json_data = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, false);
     try testing.expectEqualSlices(u8, "{\"a\":{\"$date\":{\"$numberLong\":\"-284643869501\"}}}", relaxed_json_data);
 
-    const extjson_string = try bson_document.toJsonString(arena_allocator, true);
+    const extjson_string = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, true);
     defer arena_allocator.free(extjson_string);
 
     try testing.expectEqualSlices(u8, "{\"a\":{\"$date\":{\"$numberLong\":\"-284643869501\"}}}", extjson_string);
@@ -1182,10 +1184,10 @@ test "write bson to json with datetime: Y10K - /bson-corpus/tests/datetime.json"
 
     try testing.expectEqualSlices(u8, &expected_data, bson_document.raw_data);
 
-    const relaxed_json_data = try bson_document.toJsonString(arena_allocator, false);
+    const relaxed_json_data = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, false);
     try testing.expectEqualSlices(u8, "{\"a\":{\"$date\":{\"$numberLong\":\"253402300800000\"}}}", relaxed_json_data);
 
-    const extjson_string = try bson_document.toJsonString(arena_allocator, true);
+    const extjson_string = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, true);
     defer arena_allocator.free(extjson_string);
 
     try testing.expectEqualSlices(u8, "{\"a\":{\"$date\":{\"$numberLong\":\"253402300800000\"}}}", extjson_string);
@@ -1236,7 +1238,7 @@ test "array1 of int32s" {
         [_]u8{0};
 
     try testing.expectEqualSlices(u8, &expected_data, bson_document.raw_data);
-    const json_string = try bson_document.toJsonString(arena_allocator, false);
+    const json_string = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, false);
     defer arena_allocator.free(json_string);
     try testing.expectEqualSlices(u8, "{\"array1\":[3,4]}", json_string);
 
@@ -1291,7 +1293,7 @@ test "array1 of int64s" {
         [_]u8{0};
 
     try testing.expectEqualSlices(u8, &expected_data, bson_document.raw_data);
-    const json_string = try bson_document.toJsonString(arena_allocator, false);
+    const json_string = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, false);
     defer arena_allocator.free(json_string);
     try testing.expectEqualSlices(u8, "{\"array1\":[1,2]}", json_string);
 }
@@ -1345,7 +1347,7 @@ test "array1 of strings" {
         [_]u8{0};
 
     try testing.expectEqualSlices(u8, &expected_data, bson_document.raw_data);
-    const json_string = try bson_document.toJsonString(arena_allocator, false);
+    const json_string = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, false);
     defer arena_allocator.free(json_string);
     try testing.expectEqualSlices(u8, "{\"array1\":[\"hello\",\"world\"]}", json_string);
 }
@@ -1395,7 +1397,7 @@ test "array1 of booleans" {
         [_]u8{0};
 
     try testing.expectEqualSlices(u8, &expected_data, bson_document.raw_data);
-    const json_string = try bson_document.toJsonString(arena_allocator, false);
+    const json_string = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, false);
     defer arena_allocator.free(json_string);
     try testing.expectEqualSlices(u8, "{\"array1\":[true,false]}", json_string);
 }
@@ -1409,7 +1411,7 @@ test "array1 of int32 - extended json" {
     const bson_document = try BsonDocument.jsonStringToBson(json_string, arena_allocator);
     defer arena_allocator.destroy(bson_document);
 
-    const json_string_relaxed = try bson_document.toJsonString(arena_allocator, false);
+    const json_string_relaxed = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, false);
     defer arena_allocator.free(json_string_relaxed);
     try testing.expectEqualSlices(u8, "{\"a\":[10]}", json_string_relaxed);
 }
@@ -1423,7 +1425,7 @@ test "regex options - handle unsorted options" {
     const bson_document = try BsonDocument.jsonStringToBson(json_string, arena_allocator);
     defer arena_allocator.destroy(bson_document);
 
-    const json_string_relaxed = try bson_document.toJsonString(arena_allocator, false);
+    const json_string_relaxed = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, false);
     defer arena_allocator.free(json_string_relaxed);
     try testing.expectEqualSlices(u8, "{\"a\":{\"$regularExpression\":{\"pattern\":\"^[a-z]+$\",\"options\":\"im\"}}}", json_string_relaxed);
 }

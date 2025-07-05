@@ -10,6 +10,7 @@ const testing = std.testing;
 const Allocator = std.mem.Allocator;
 const native_endian = builtin.cpu.arch.endian();
 const debug = std.debug;
+const assert = std.debug.assert;
 
 const ElementType = bson_types.BsonElementType;
 const BsonSubType = bson_types.BsonSubType;
@@ -23,18 +24,9 @@ const BsonRegexpOptions = bson_types.RegexpOptions;
 const FixedBufferStreamJsonReader = std.io.FixedBufferStream([]const u8).Reader;
 const JsonReader = std.json.Reader(0x1000, FixedBufferStreamJsonReader);
 
-const assert = std.debug.assert;
-
-test {
-    _ = datetime;
-}
-
 pub const BsonDocument = struct {
     len: usize,
     raw_data: []const u8,
-
-    const document_len_placeholder: comptime_int = @as(i32, @intCast(0));
-    const element_type_placeholder: comptime_int = @as(u8, @intCast(0));
 
     pub fn deinit(self: *BsonDocument, allocator: Allocator) void {
         allocator.free(self.raw_data);
@@ -87,7 +79,7 @@ pub const BsonDocument = struct {
 
     fn appendDocumentToBson(comptime T: type, obj: T, data_writer: *std.ArrayList(u8)) BsonAppendError!void {
         const pos = data_writer.items.len;
-        try appendInt32(data_writer, document_len_placeholder);
+        try appendDocumentLenPlaceholder(data_writer);
         try writeToBsonWriter(T, obj, data_writer);
         const document_len = data_writer.items.len - pos;
         updateLenMarker(data_writer.items, pos, document_len);
@@ -115,7 +107,7 @@ pub const BsonDocument = struct {
             },
             .array => {
                 const start_pos = writer.items.len;
-                try appendInt32(writer, document_len_placeholder);
+                try appendDocumentLenPlaceholder(writer);
                 for (field_value, 0..) |item, item_index| {
                     const array_item_type = comptime ElementType.typeToElementType(@TypeOf(item));
                     try appendElementType(writer, array_item_type);
@@ -149,7 +141,11 @@ pub const BsonDocument = struct {
         }
     }
 
-    pub fn updateDocumentLenMarker(raw_data: []u8) void {
+    inline fn appendDocumentLenPlaceholder(writer: *std.ArrayList(u8)) std.mem.Allocator.Error!void {
+        try appendInt32(writer, 0);
+    }
+
+    pub fn overwriteDocumentLenPlaceholder(raw_data: []u8) void {
         return updateLenMarker(raw_data, 0, raw_data.len);
     }
 
@@ -196,7 +192,7 @@ pub const BsonDocument = struct {
             switch (token) {
                 .object_begin => {
                     try stack.append(data_writer.items.len);
-                    try appendInt32(data_writer, document_len_placeholder);
+                    try appendDocumentLenPlaceholder(data_writer);
 
                     continue :loop;
                 },
@@ -213,7 +209,7 @@ pub const BsonDocument = struct {
                 },
                 .end_of_document => {
                     assert(stack.items.len == 0);
-                    updateDocumentLenMarker(data_writer.items);
+                    overwriteDocumentLenPlaceholder(data_writer.items);
 
                     break :loop;
                 },
@@ -242,7 +238,7 @@ pub const BsonDocument = struct {
         switch (element) {
             .object_begin => {
                 try stack.append(data_writer.items.len);
-                try appendInt32(data_writer, document_len_placeholder);
+                try appendDocumentLenPlaceholder(data_writer);
 
                 try parseJsonStringToBson(data_writer, reader, stack, last_element_type_pos);
             },
@@ -262,7 +258,6 @@ pub const BsonDocument = struct {
                 try appendPartialString(data_writer, reader, element, true);
             },
             .number => |value| {
-                // TODO: check decimal128
                 _ = try appendNumberFromString(data_writer, value);
             },
             .true => {
@@ -284,18 +279,17 @@ pub const BsonDocument = struct {
 
     fn parseArrayToBson(data_writer: *std.ArrayList(u8), reader: *JsonReader, stack: *std.ArrayList(usize)) anyerror!void {
         const array_start_pos = data_writer.items.len;
-        try appendInt32(data_writer, document_len_placeholder);
+        try appendDocumentLenPlaceholder(data_writer);
 
         var array_item_index: i32 = 0;
         var has_more: bool = true;
         var token: std.json.Token = try reader.next();
-        while (has_more) {
+        while (has_more) : (token = try reader.next()) {
             has_more = try parseArrayItemToBson(data_writer, reader, stack, array_item_index, token);
             if (!has_more) {
                 break;
             }
             array_item_index += 1;
-            token = try reader.next();
         }
 
         try appendNullTerminator(data_writer);
@@ -329,7 +323,7 @@ pub const BsonDocument = struct {
         }
         const current_pos = data_writer.items.len;
         if (add_len_prefix) {
-            try appendInt32(data_writer, document_len_placeholder);
+            try appendDocumentLenPlaceholder(data_writer);
         }
 
         var next_token = starting_token;
@@ -567,9 +561,6 @@ pub const BsonDocument = struct {
                     // nothing to append
                     assert(token == .number);
                 },
-                // .decimal128 => {
-                //     const value = try std.fmt.parseInt(u128, value_as_string, 10);
-                // },
                 else => {
                     @panic("unexpected element type");
                 },
@@ -781,7 +772,6 @@ pub const BsonDocument = struct {
     inline fn appendENameToJsonString(writer: anytype, reader: anytype) !void {
         try writer.writeByte('"');
         try reader.streamUntilDelimiter(writer, 0x00, 1024); // TODO: handle error
-
         try writer.writeAll("\":");
     }
 
@@ -847,7 +837,7 @@ pub const BsonDocument = struct {
         try std.json.encodeJsonString(buf[0 .. bytes_read - 1], .{ .escape_unicode = false }, writer);
     }
 
-    fn appendInt32ToJsonString(writer: anytype, reader: anytype, is_strict_ext_json: bool) !void {
+    fn appendInt32ToJsonString(writer: anytype, reader: anytype, comptime is_strict_ext_json: bool) !void {
         const num = try reader.readInt(i32, .little);
         if (is_strict_ext_json) {
             try writer.print("{{\"$numberInt\":\"{d}\"}}", .{num});
@@ -856,7 +846,7 @@ pub const BsonDocument = struct {
         }
     }
 
-    fn appendInt64ToJsonString(writer: anytype, reader: anytype, is_strict_ext_json: bool) !void {
+    fn appendInt64ToJsonString(writer: anytype, reader: anytype, comptime is_strict_ext_json: bool) !void {
         const num = try reader.readInt(i64, .little);
         if (is_strict_ext_json) {
             try writer.print("{{\"$numberLong\":\"{d}\"}}", .{num});
@@ -877,16 +867,16 @@ pub const BsonDocument = struct {
         // try writer.print("\"}}", .{});
     }
 
-    fn appendDoubleToJsonString(writer: anytype, reader: anytype, is_strict_ext_json: bool) !void {
+    fn appendDoubleToJsonString(writer: anytype, reader: anytype, comptime is_strict_ext_json: bool) !void {
         const num_bytes = try reader.readBoundedBytes(@sizeOf(f64));
         const num = std.mem.bytesToValue(f64, num_bytes.slice());
         if (is_strict_ext_json) {
-            try writer.print("{{\"$numberDouble\":\"", .{});
+            try writer.writeAll("{\"$numberDouble\":\"");
         }
         try writeFloatAsCanonicalExtendedJsonString(writer, num);
 
         if (is_strict_ext_json) {
-            try writer.print("\"}}", .{});
+            try writer.writeAll("\"}");
         }
     }
 
@@ -959,7 +949,7 @@ pub const BsonDocument = struct {
         try writer.writeAll("\"}}");
     }
 
-    fn appendUtcDateTimeToJsonString(writer: anytype, reader: anytype, is_strict_ext_json: bool) !void {
+    fn appendUtcDateTimeToJsonString(writer: anytype, reader: anytype, comptime is_strict_ext_json: bool) !void {
         const num = try reader.readInt(i64, .little);
         if (is_strict_ext_json or num < 0 or num >= datetime.DATETIME_MAX_I64) {
             try writer.print("{{\"$date\":{{\"$numberLong\":\"{d}\"}}}}", .{num});
@@ -1048,11 +1038,13 @@ pub const JsonParsingRegExpError = error{
     InvalidRegExpValue,
     InvalidRegExpOptions,
 };
-pub const JsonParseError = std.json.ParseFromValueError || JsonParsingRegExpError;
+
+pub const JsonParseError = std.json.ParseFromValueError || JsonParsingRegExpError || error{InvalidDecimal128Value};
 
 pub const FloatFormatCanonicalExtendedJsonError = std.fmt.format_float.FormatError || error{OutOfMemory};
 
 test {
+    _ = datetime;
     _ = @import("bson-tests.zig");
     _ = @import("bson-corpus-tests.zig");
 }

@@ -1,4 +1,5 @@
 const std = @import("std");
+const Decimal128 = @import("binary_coded_decimal");
 
 const Allocator = std.mem.Allocator;
 
@@ -107,8 +108,7 @@ pub const BsonElementType = enum(i8) {
                     return .double;
                 }
                 if (std.mem.eql(u8, key, "$numberDecimal")) {
-                    @panic("not implemented yet");
-                    // return .decimal128;
+                    return .decimal128;
                 }
                 return null;
             },
@@ -260,3 +260,5 @@ pub const RegexpOptions = enum(u8) {
         std.sort.heap(u8, regexp_options[0 .. regexp_options.len - 1], {}, std.sort.asc(u8));
     }
 };
+
+pub const BsonDecimal128 = Decimal128;

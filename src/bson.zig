@@ -4,7 +4,6 @@ const datetime = @import("datetime.zig");
 const utils = @import("utils.zig");
 const colors = @import("colors.zig");
 const bson_types = @import("bson-types.zig");
-// const decimal128_utils = @import("decimal128-utils.zig");
 
 const testing = std.testing;
 const Allocator = std.mem.Allocator;
@@ -20,6 +19,7 @@ const BsonObjectId = bson_types.BsonObjectId;
 const BsonUtcDatetime = bson_types.BsonUtcDatetime;
 const BsonTimestamp = bson_types.BsonTimestamp;
 const BsonRegexpOptions = bson_types.RegexpOptions;
+const BsonDecimal128 = bson_types.BsonDecimal128;
 
 const FixedBufferStreamJsonReader = std.io.FixedBufferStream([]const u8).Reader;
 const JsonReader = std.json.Reader(0x1000, FixedBufferStreamJsonReader);
@@ -530,10 +530,11 @@ pub const BsonDocument = struct {
                     try appendNumber(data_writer, value);
                 },
                 .decimal128 => {
-                    @panic("not implemented yet");
-                    // const value_as_string = token.string;
-                    // const value = decimal128_utils.parseDecimal128(value_as_string);
-                    // try appendDecimal128(data_writer, value);
+                    const value_as_string = token.string;
+                    var value = try BsonDecimal128.fromNumericString(value_as_string);
+                    if (value.signal.inexact) return JsonParseError.InvalidDecimal128Value;
+
+                    try appendDecimal128(data_writer, &value);
                 },
                 .object_id => {
                     const value_as_string = token.string;
@@ -658,11 +659,8 @@ pub const BsonDocument = struct {
         try writer.appendSlice(&value_bytes);
     }
 
-    inline fn appendDecimal128(writer: *std.ArrayList(u8), value: f128) std.mem.Allocator.Error!void {
-        var value_bytes = std.mem.toBytes(value);
-        value_bytes = @bitCast(if (native_endian == .little) value_bytes else @byteSwap(value_bytes));
-
-        try writer.appendSlice(&value_bytes);
+    inline fn appendDecimal128(writer: *std.ArrayList(u8), value: *BsonDecimal128) std.mem.Allocator.Error!void {
+        try value.writeAsBytes(writer);
     }
 
     fn appendIntAsString(comptime T: type, writer: *std.ArrayList(u8), value: T, comptime add_len_prefix: bool, comptime add_null_terminator: bool) std.mem.Allocator.Error!void {

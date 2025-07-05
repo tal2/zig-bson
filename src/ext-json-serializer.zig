@@ -2,7 +2,7 @@ const std = @import("std");
 const bson = @import("bson.zig");
 const utils = @import("utils.zig");
 const datetime = @import("datetime.zig");
-// const Decimal128 = @import("binary_coded_decimal");
+const Decimal128 = @import("binary_coded_decimal");
 const bson_types = @import("bson-types.zig");
 
 const assert = std.debug.assert;
@@ -67,11 +67,7 @@ pub fn appendDocumentToJsonString(reader: anytype, writer: anytype, comptime is_
     }
     try writer.writeByte('}');
 
-    std.debug.print("writer.items: {s}\n", .{writer.context.items});
-    skipDocumentTerminatingByte(reader) catch |err| {
-        std.debug.print("writer.items: {s}\n", .{writer.context.items});
-        std.debug.print("skipDocumentTerminatingByte failed: {}\n", .{err});
-    };
+    try skipDocumentTerminatingByte(reader);
 }
 
 inline fn appendENameToJsonString(writer: anytype, reader: anytype) !void {
@@ -161,12 +157,9 @@ fn appendInt64ToJsonString(writer: anytype, reader: anytype, comptime is_strict_
 }
 
 fn appendDecimal128ToJsonString(writer: anytype, reader: anytype) !void {
-    _ = reader;
-    _ = writer;
-    @panic("not implemented");
-    // try writer.writeAll("{\"$numberDecimal\":\"");
-    // try Decimal128.readAndEncode(reader, writer);
-    // try writer.writeAll("\"}");
+    try writer.writeAll("{\"$numberDecimal\":\"");
+    try Decimal128.readAndEncode(reader, writer);
+    try writer.writeAll("\"}");
 }
 
 fn appendDoubleToJsonString(writer: anytype, reader: anytype, comptime is_strict_ext_json: bool) !void {

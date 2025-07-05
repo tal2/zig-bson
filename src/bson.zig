@@ -782,8 +782,7 @@ pub const BsonDocument = struct {
         try writer.writeByte('"');
         try reader.streamUntilDelimiter(writer, 0x00, 1024); // TODO: handle error
 
-        try writer.writeByte('"');
-        try writer.writeByte(':');
+        try writer.writeAll("\":");
     }
 
     fn appendElementValueToJsonString(writer: anytype, reader: anytype, element_type: ElementType, comptime is_strict_ext_json: bool) !void {
@@ -897,7 +896,7 @@ pub const BsonDocument = struct {
             if (is_negative) {
                 try writer.writeByte('-');
             }
-            try writer.print("0.0", .{});
+            try writer.writeAll("0.0");
             return;
         }
 
@@ -905,7 +904,7 @@ pub const BsonDocument = struct {
             if (std.math.isNegativeInf(num)) {
                 try writer.writeByte('-');
             }
-            try writer.print("Infinity", .{});
+            try writer.writeAll("Infinity");
             return;
         }
 
@@ -916,16 +915,15 @@ pub const BsonDocument = struct {
             if (num_string[0] == '-') {
                 try writer.writeByte('-');
             }
-            try writer.print("NaN", .{});
+            try writer.writeAll("NaN");
             return;
         }
 
         if (std.mem.endsWith(u8, num_string, "e0")) {
-            try writer.print("{s}", .{buf[0 .. num_string.len - 2]});
+            try writer.writeAll(buf[0 .. num_string.len - 2]);
             const len: usize = if (num > 0) 3 else 4;
             if (num_string.len == len) {
-                try writer.writeByte('.');
-                try writer.writeByte('0');
+                try writer.writeAll(".0");
             }
             return;
         }
@@ -933,9 +931,10 @@ pub const BsonDocument = struct {
         var parts = std.mem.splitAny(u8, num_string, "e");
         const first_part = parts.next().?;
         const second_part = parts.next();
-        try writer.print("{s}", .{first_part});
+        try writer.writeAll(first_part);
         if (second_part) |second_part_value| {
-            try writer.print("E+{s}", .{second_part_value});
+            try writer.writeAll("E+");
+            try writer.writeAll(second_part_value);
         }
     }
 
@@ -947,7 +946,7 @@ pub const BsonDocument = struct {
     }
 
     fn appendRegexpToJsonString(writer: anytype, reader: anytype) !void {
-        try writer.print("{{\"$regularExpression\":{{\"pattern\":\"", .{});
+        try writer.writeAll("{\"$regularExpression\":{\"pattern\":\"");
         var pattern_bytes = std.ArrayList(u8).init(writer.context.allocator);
         defer pattern_bytes.deinit();
         try reader.streamUntilDelimiter(pattern_bytes.writer(), 0x00, 1024); // TODO: handle error
@@ -955,9 +954,9 @@ pub const BsonDocument = struct {
 
         try std.json.encodeJsonStringChars(pattern_bytes_slice, .{ .escape_unicode = true }, writer);
 
-        try writer.print("\",\"options\":\"", .{});
+        try writer.writeAll("\",\"options\":\"");
         try reader.streamUntilDelimiter(writer, 0x00, 5); // TODO: handle error
-        try writer.print("\"}}}}", .{});
+        try writer.writeAll("\"}}");
     }
 
     fn appendUtcDateTimeToJsonString(writer: anytype, reader: anytype, is_strict_ext_json: bool) !void {
@@ -991,7 +990,7 @@ pub const BsonDocument = struct {
         const sub_type_byte = try reader.readByte();
         const sub_type: BsonSubType = @enumFromInt(sub_type_byte);
 
-        try writer.print("{{\"$binary\":{{\"base64\":\"", .{});
+        try writer.writeAll("{\"$binary\":{\"base64\":\"");
         if (sub_type == .binary_old) {
             @branchHint(.unlikely);
             try reader.skipBytes(@sizeOf(i32), .{});
@@ -1011,11 +1010,11 @@ pub const BsonDocument = struct {
     }
 
     fn appendMinKeyToJsonString(writer: anytype) !void {
-        try writer.print("{{\"$minKey\":1}}", .{});
+        try writer.writeAll("{\"$minKey\":1}");
     }
 
     fn appendMaxKeyToJsonString(writer: anytype) !void {
-        try writer.print("{{\"$maxKey\":1}}", .{});
+        try writer.writeAll("{\"$maxKey\":1}");
     }
 
     inline fn skipArrayItemName(reader: anytype) !void {

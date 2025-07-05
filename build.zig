@@ -10,12 +10,20 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    const zig_decimal_dep = b.dependency("binary_coded_decimal", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    const zig_decimal_mod = zig_decimal_dep.module("zig_decimal_module");
+    lib_mod.addImport("binary_coded_decimal", zig_decimal_mod);
+
     const exe_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
 
+    exe_mod.addImport("binary_coded_decimal", zig_decimal_mod);
 
     const lib = b.addLibrary(.{
         .linkage = .static,

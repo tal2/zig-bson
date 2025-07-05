@@ -8,6 +8,9 @@
     .minimum_zig_version = "0.14.0",
 
     .dependencies = .{
+        .binary_coded_decimal = .{
+            .path = "../zig-binary-coded-decimal",
+        },
     },
     .paths = .{
         "build.zig",

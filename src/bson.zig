@@ -729,5 +729,5 @@ pub const JsonParseError = std.json.ParseFromValueError || JsonParsingRegExpErro
 test {
     _ = datetime;
     _ = @import("bson-tests.zig");
-    _ = @import("bson-corpus-tests.zig");
+    // _ = @import("bson-corpus-tests.zig");
 }

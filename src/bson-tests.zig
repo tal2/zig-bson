@@ -6,7 +6,9 @@ const colors = @import("colors.zig");
 const bson_types = @import("bson-types.zig");
 const bson = @import("bson.zig");
 const BsonDocument = bson.BsonDocument;
+const BsonWriter = @import("bson-writer.zig");
 const ExtJsonSerializer = @import("bson-ext-json-serializer.zig");
+const ExtJsonParser = @import("bson-ext-json-parser.zig");
 
 const testing = std.testing;
 const Allocator = std.mem.Allocator;
@@ -22,7 +24,7 @@ const BsonUtcDatetime = bson_types.BsonUtcDatetime;
 const BsonTimestamp = bson_types.BsonTimestamp;
 const BsonRegexpOptions = bson_types.RegexpOptions;
 
-const JsonParsingRegExpError = bson.JsonParsingRegExpError;
+const JsonParsingRegExpError = ExtJsonParser.JsonParsingRegExpError;
 const WriteJsonStringError = ExtJsonSerializer.WriteJsonStringError;
 
 test "hello world example from bson spec" {
@@ -38,7 +40,7 @@ test "hello world example from bson spec" {
         .hello = "world",
     };
 
-    const bson_document = try BsonDocument.writeToBson(HelloWorldStruct, person, arena_allocator);
+    const bson_document = try BsonWriter.writeToBson(HelloWorldStruct, person, arena_allocator);
     defer arena_allocator.destroy(bson_document);
 
     const expected_data =
@@ -77,7 +79,7 @@ test "hello world to bson with int32" {
         .num = 42,
     };
 
-    const bson_document = try BsonDocument.writeToBson(HelloWorldStruct, person, arena_allocator);
+    const bson_document = try BsonWriter.writeToBson(HelloWorldStruct, person, arena_allocator);
     defer arena_allocator.destroy(bson_document);
 
     const expected_data =
@@ -113,7 +115,7 @@ test "write bson with int16 (coerced to int32)" {
         .num = 42,
     };
 
-    const bson_document = try BsonDocument.writeToBson(HelloWorldStruct, person, arena_allocator);
+    const bson_document = try BsonWriter.writeToBson(HelloWorldStruct, person, arena_allocator);
     defer arena_allocator.destroy(bson_document);
 
     const expected_data =
@@ -149,7 +151,7 @@ test "write bson with int64" {
         .num = 42,
     };
 
-    const bson_document = try BsonDocument.writeToBson(HelloWorldStruct, person, arena_allocator);
+    const bson_document = try BsonWriter.writeToBson(HelloWorldStruct, person, arena_allocator);
     defer arena_allocator.destroy(bson_document);
 
     const expected_data =
@@ -191,7 +193,7 @@ test "write bson with sub document" {
         },
     };
 
-    const bson_document = try BsonDocument.writeToBson(ParentDocument, parent_document, arena_allocator);
+    const bson_document = try BsonWriter.writeToBson(ParentDocument, parent_document, arena_allocator);
     defer arena_allocator.destroy(bson_document);
 
     const sub_document_data =
@@ -242,7 +244,7 @@ test "write bson with sub document" {
 //         .num = 42,
 //     };
 
-//     const bson_document = try BsonDocument.writeToBson(BsonWithDecimal128, doc, arena_allocator);
+//     const bson_document = try BsonWriter.writeToBson(BsonWithDecimal128, doc, arena_allocator);
 //     defer arena_allocator.destroy(bson_document);
 
 //     const expected_data =
@@ -278,7 +280,7 @@ test "write bson with null value" {
         .num = null,
     };
 
-    const bson_document = try BsonDocument.writeToBson(BsonWithNull, doc, arena_allocator);
+    const bson_document = try BsonWriter.writeToBson(BsonWithNull, doc, arena_allocator);
     defer arena_allocator.destroy(bson_document);
 
     const expected_data =
@@ -313,7 +315,7 @@ test "write bson with binary" {
         .binary_data = BsonBinary.fromBytes(u8, &value, BsonSubType.generic),
     };
 
-    const bson_document = try BsonDocument.writeToBson(BinaryDocument, doc, arena_allocator);
+    const bson_document = try BsonWriter.writeToBson(BinaryDocument, doc, arena_allocator);
     defer arena_allocator.destroy(bson_document);
 
     const expected_data =
@@ -348,7 +350,7 @@ test "write bson with boolean" {
         .boolean_data = true,
     };
 
-    const bson_document = try BsonDocument.writeToBson(BooleanDocument, doc, arena_allocator);
+    const bson_document = try BsonWriter.writeToBson(BooleanDocument, doc, arena_allocator);
     defer arena_allocator.destroy(bson_document);
 
     const expected_data =
@@ -379,7 +381,7 @@ test "write bson to json with int32 value in range - /bson-corpus/tests/int32.js
         .i = 1,
     };
 
-    const bson_document = try BsonDocument.writeToBson(DocumentStruct, doc, arena_allocator);
+    const bson_document = try BsonWriter.writeToBson(DocumentStruct, doc, arena_allocator);
     defer arena_allocator.destroy(bson_document);
 
     const expected_data =
@@ -420,7 +422,7 @@ test "write bson to json with int32 min value - /bson-corpus/tests/int32.json" {
         .i = -2147483648,
     };
 
-    const bson_document = try BsonDocument.writeToBson(DocumentStruct, doc, arena_allocator);
+    const bson_document = try BsonWriter.writeToBson(DocumentStruct, doc, arena_allocator);
     defer arena_allocator.destroy(bson_document);
 
     const expected_data =
@@ -441,7 +443,7 @@ test "write bson to json with int32 min value - /bson-corpus/tests/int32.json" {
     defer arena_allocator.free(json_string);
     try testing.expectEqualSlices(u8, "{\"i\":-2147483648}", json_string);
 
-    const bson_document_from_json = try BsonDocument.jsonStringToBson(json_string, arena_allocator);
+    const bson_document_from_json = try ExtJsonParser.jsonStringToBson(json_string, arena_allocator);
     defer arena_allocator.destroy(bson_document_from_json);
     try testing.expectEqualSlices(u8, &expected_data, bson_document_from_json.raw_data);
 
@@ -449,7 +451,7 @@ test "write bson to json with int32 min value - /bson-corpus/tests/int32.json" {
     defer arena_allocator.free(extjson_string);
     try testing.expectEqualSlices(u8, "{\"i\":{\"$numberInt\":\"-2147483648\"}}", extjson_string);
 
-    const bson_document_from_extjson = try BsonDocument.jsonStringToBson(extjson_string, arena_allocator);
+    const bson_document_from_extjson = try ExtJsonParser.jsonStringToBson(extjson_string, arena_allocator);
     defer arena_allocator.destroy(bson_document_from_extjson);
     try testing.expectEqualSlices(u8, &expected_data, bson_document_from_extjson.raw_data);
 }
@@ -467,7 +469,7 @@ test "write bson to json with int32 max value - /bson-corpus/tests/int32.json" {
         .i = 2147483647,
     };
 
-    const bson_document = try BsonDocument.writeToBson(DocumentStruct, doc, arena_allocator);
+    const bson_document = try BsonWriter.writeToBson(DocumentStruct, doc, arena_allocator);
     defer arena_allocator.destroy(bson_document);
 
     const expected_data =
@@ -508,7 +510,7 @@ test "write bson to json with int64 min value - /bson-corpus/tests/int64.json" {
         .i = -9223372036854775808,
     };
 
-    const bson_document = try BsonDocument.writeToBson(DocumentStruct, doc, arena_allocator);
+    const bson_document = try BsonWriter.writeToBson(DocumentStruct, doc, arena_allocator);
     defer arena_allocator.destroy(bson_document);
 
     const expected_data =
@@ -549,7 +551,7 @@ test "write bson to json with int64 max value - /bson-corpus/tests/int64.json" {
         .i = 9223372036854775807,
     };
 
-    const bson_document = try BsonDocument.writeToBson(DocumentStruct, doc, arena_allocator);
+    const bson_document = try BsonWriter.writeToBson(DocumentStruct, doc, arena_allocator);
     defer arena_allocator.destroy(bson_document);
 
     const expected_data =
@@ -590,7 +592,7 @@ test "write bson to json with int64 value: 0 - /bson-corpus/tests/int64.json" {
         .i = 0,
     };
 
-    const bson_document = try BsonDocument.writeToBson(DocumentStruct, doc, arena_allocator);
+    const bson_document = try BsonWriter.writeToBson(DocumentStruct, doc, arena_allocator);
     defer arena_allocator.destroy(bson_document);
 
     const expected_data =
@@ -631,7 +633,7 @@ test "write bson to json with int64 value: 1 - /bson-corpus/tests/int64.json" {
         .a = 1,
     };
 
-    const bson_document = try BsonDocument.writeToBson(DocumentStruct, doc, arena_allocator);
+    const bson_document = try BsonWriter.writeToBson(DocumentStruct, doc, arena_allocator);
     defer arena_allocator.destroy(bson_document);
 
     const expected_data =
@@ -672,7 +674,7 @@ test "write bson to json with boolean value: true - /bson-corpus/tests/boolean.j
         .b = true,
     };
 
-    const bson_document = try BsonDocument.writeToBson(DocumentStruct, doc, arena_allocator);
+    const bson_document = try BsonWriter.writeToBson(DocumentStruct, doc, arena_allocator);
     defer arena_allocator.destroy(bson_document);
 
     const expected_data =
@@ -713,7 +715,7 @@ test "write bson to json with boolean value: false - /bson-corpus/tests/boolean.
         .b = false,
     };
 
-    const bson_document = try BsonDocument.writeToBson(DocumentStruct, doc, arena_allocator);
+    const bson_document = try BsonWriter.writeToBson(DocumentStruct, doc, arena_allocator);
     defer arena_allocator.destroy(bson_document);
 
     const expected_data =
@@ -754,7 +756,7 @@ test "write bson to json with binary subtype 0x00 (Zero-length) - /bson-corpus/t
         .x = BsonBinary.fromBytes(u8, &[0]u8{}, BsonSubType.generic),
     };
 
-    const bson_document = try BsonDocument.writeToBson(DocumentStruct, doc, arena_allocator);
+    const bson_document = try BsonWriter.writeToBson(DocumentStruct, doc, arena_allocator);
     defer arena_allocator.destroy(bson_document);
 
     const expected_data =
@@ -796,7 +798,7 @@ test "write bson to json with binary subtype 0x00 - /bson-corpus/tests/binary.js
         .x = BsonBinary.fromBytes(u8, &[_]u8{ 255, 255 }, BsonSubType.generic),
     };
 
-    const bson_document = try BsonDocument.writeToBson(DocumentStruct, doc, arena_allocator);
+    const bson_document = try BsonWriter.writeToBson(DocumentStruct, doc, arena_allocator);
     defer arena_allocator.destroy(bson_document);
 
     const expected_data =
@@ -838,7 +840,7 @@ test "write bson to json with binary subtype 0x01 - /bson-corpus/tests/binary.js
         .x = BsonBinary.fromBytes(u8, &[_]u8{ 255, 255 }, BsonSubType.function),
     };
 
-    const bson_document = try BsonDocument.writeToBson(DocumentStruct, doc, arena_allocator);
+    const bson_document = try BsonWriter.writeToBson(DocumentStruct, doc, arena_allocator);
     defer arena_allocator.destroy(bson_document);
 
     const expected_data =
@@ -880,7 +882,7 @@ test "write bson to json with binary subtype 0x02 - /bson-corpus/tests/binary.js
         .x = BsonBinary.fromBytes(u8, &[_]u8{ 255, 255 }, BsonSubType.binary_old),
     };
 
-    const bson_document = try BsonDocument.writeToBson(DocumentStruct, doc, arena_allocator);
+    const bson_document = try BsonWriter.writeToBson(DocumentStruct, doc, arena_allocator);
     defer arena_allocator.destroy(bson_document);
 
     const expected_data =
@@ -924,7 +926,7 @@ test "write bson to json with binary subtype 0x03 - /bson-corpus/tests/binary.js
         .x = BsonBinary.fromBytes(u8, &[_]u8{ 115, 255, 210, 100, 68, 179, 76, 105, 144, 232, 231, 209, 223, 192, 53, 212 }, BsonSubType.uuid_old),
     };
 
-    const bson_document = try BsonDocument.writeToBson(DocumentStruct, doc, arena_allocator);
+    const bson_document = try BsonWriter.writeToBson(DocumentStruct, doc, arena_allocator);
     defer arena_allocator.destroy(bson_document);
 
     const expected_data =
@@ -966,7 +968,7 @@ test "write bson to json with binary subtype 0x04 - /bson-corpus/tests/binary.js
         .x = BsonBinary.fromBytes(u8, &[_]u8{ 115, 255, 210, 100, 68, 179, 76, 105, 144, 232, 231, 209, 223, 192, 53, 212 }, BsonSubType.uuid),
     };
 
-    const bson_document = try BsonDocument.writeToBson(DocumentStruct, doc, arena_allocator);
+    const bson_document = try BsonWriter.writeToBson(DocumentStruct, doc, arena_allocator);
     defer arena_allocator.destroy(bson_document);
 
     const expected_data =
@@ -1008,7 +1010,7 @@ test "write bson to json with binary subtype 0x80 - /bson-corpus/tests/binary.js
         .x = BsonBinary.fromBytes(u8, &[_]u8{ 115, 255, 210, 100, 68, 179, 76, 105, 144, 232, 231, 209, 223, 192, 53, 212 }, BsonSubType.user_defined),
     };
 
-    const bson_document = try BsonDocument.writeToBson(DocumentStruct, doc, arena_allocator);
+    const bson_document = try BsonWriter.writeToBson(DocumentStruct, doc, arena_allocator);
     defer arena_allocator.destroy(bson_document);
 
     const expected_data =
@@ -1050,7 +1052,7 @@ test "write bson to json with datetime: epoch - /bson-corpus/tests/datetime.json
         .a = BsonUtcDatetime.fromInt64(0),
     };
 
-    const bson_document = try BsonDocument.writeToBson(DocumentStruct, doc, arena_allocator);
+    const bson_document = try BsonWriter.writeToBson(DocumentStruct, doc, arena_allocator);
     defer arena_allocator.destroy(bson_document);
 
     const expected_data =
@@ -1089,7 +1091,7 @@ test "write bson to json with datetime: positive ms - /bson-corpus/tests/datetim
         .a = BsonUtcDatetime.fromInt64(1356351330501),
     };
 
-    const bson_document = try BsonDocument.writeToBson(DocumentStruct, doc, arena_allocator);
+    const bson_document = try BsonWriter.writeToBson(DocumentStruct, doc, arena_allocator);
     defer arena_allocator.destroy(bson_document);
 
     const expected_data =
@@ -1128,7 +1130,7 @@ test "write bson to json with datetime: negative ms - /bson-corpus/tests/datetim
         .a = BsonUtcDatetime.fromInt64(-284643869501),
     };
 
-    const bson_document = try BsonDocument.writeToBson(DocumentStruct, doc, arena_allocator);
+    const bson_document = try BsonWriter.writeToBson(DocumentStruct, doc, arena_allocator);
     defer arena_allocator.destroy(bson_document);
 
     const expected_data =
@@ -1167,7 +1169,7 @@ test "write bson to json with datetime: Y10K - /bson-corpus/tests/datetime.json"
         .a = BsonUtcDatetime.fromInt64(253402300800000),
     };
 
-    const bson_document = try BsonDocument.writeToBson(DocumentStruct, doc, arena_allocator);
+    const bson_document = try BsonWriter.writeToBson(DocumentStruct, doc, arena_allocator);
     defer arena_allocator.destroy(bson_document);
 
     const expected_data =
@@ -1206,7 +1208,7 @@ test "array1 of int32s" {
         .array1 = &[_]i32{ 3, 4 },
     };
 
-    const bson_document = try BsonDocument.writeToBson(ArrayDocument, doc, arena_allocator);
+    const bson_document = try BsonWriter.writeToBson(ArrayDocument, doc, arena_allocator);
     defer arena_allocator.destroy(bson_document);
 
     const expected_data =
@@ -1242,7 +1244,7 @@ test "array1 of int32s" {
     defer arena_allocator.free(json_string);
     try testing.expectEqualSlices(u8, "{\"array1\":[3,4]}", json_string);
 
-    const parsed_document = try BsonDocument.jsonStringToBson(json_string, arena_allocator);
+    const parsed_document = try ExtJsonParser.jsonStringToBson(json_string, arena_allocator);
     defer arena_allocator.destroy(parsed_document);
 
     try testing.expectEqualSlices(u8, &expected_data, parsed_document.raw_data);
@@ -1261,7 +1263,7 @@ test "array1 of int64s" {
         .array1 = &[_]i64{ 1, 2 },
     };
 
-    const bson_document = try BsonDocument.writeToBson(ArrayDocument, doc, arena_allocator);
+    const bson_document = try BsonWriter.writeToBson(ArrayDocument, doc, arena_allocator);
     defer arena_allocator.destroy(bson_document);
 
     const expected_data =
@@ -1311,7 +1313,7 @@ test "array1 of strings" {
         .array1 = &[_][:0]const u8{ "hello", "world" },
     };
 
-    const bson_document = try BsonDocument.writeToBson(ArrayDocument, doc, arena_allocator);
+    const bson_document = try BsonWriter.writeToBson(ArrayDocument, doc, arena_allocator);
     defer arena_allocator.destroy(bson_document);
 
     const expected_data =
@@ -1365,7 +1367,7 @@ test "array1 of booleans" {
         .array1 = &[_]bool{ true, false },
     };
 
-    const bson_document = try BsonDocument.writeToBson(ArrayDocument, doc, arena_allocator);
+    const bson_document = try BsonWriter.writeToBson(ArrayDocument, doc, arena_allocator);
     defer arena_allocator.destroy(bson_document);
 
     const expected_data =
@@ -1408,7 +1410,7 @@ test "array1 of int32 - extended json" {
     const arena_allocator = arena.allocator();
 
     const json_string = "{\"a\":[{\"$numberInt\":\"10\"}]}";
-    const bson_document = try BsonDocument.jsonStringToBson(json_string, arena_allocator);
+    const bson_document = try ExtJsonParser.jsonStringToBson(json_string, arena_allocator);
     defer arena_allocator.destroy(bson_document);
 
     const json_string_relaxed = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, false);
@@ -1422,7 +1424,7 @@ test "regex options - handle unsorted options" {
     const arena_allocator = arena.allocator();
 
     const json_string = "{\"a\":{\"$regularExpression\":{\"pattern\":\"^[a-z]+$\",\"options\":\"mi\"}}}";
-    const bson_document = try BsonDocument.jsonStringToBson(json_string, arena_allocator);
+    const bson_document = try ExtJsonParser.jsonStringToBson(json_string, arena_allocator);
     defer arena_allocator.destroy(bson_document);
 
     const json_string_relaxed = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, false);
@@ -1436,5 +1438,5 @@ test "regex options - handle invalid options" {
     const arena_allocator = arena.allocator();
 
     const json_string = "{\"a\":{\"$regularExpression\":{\"pattern\":\"^[a-z]+$\",\"options\":\"q\"}}}";
-    try testing.expectError(JsonParsingRegExpError.InvalidRegExpOptions, BsonDocument.jsonStringToBson(json_string, arena_allocator));
+    try testing.expectError(JsonParsingRegExpError.InvalidRegExpOptions, ExtJsonParser.jsonStringToBson(json_string, arena_allocator));
 }

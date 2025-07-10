@@ -6,7 +6,7 @@ const colors = @import("colors.zig");
 const bson_types = @import("bson-types.zig");
 const bson = @import("bson.zig");
 const BsonDocument = bson.BsonDocument;
-const ExtJsonSerializer = @import("ext-json-serializer.zig");
+const ExtJsonSerializer = @import("bson-ext-json-serializer.zig");
 
 const testing = std.testing;
 const Allocator = std.mem.Allocator;

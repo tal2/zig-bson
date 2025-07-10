@@ -9,8 +9,7 @@ const assert = std.debug.assert;
 
 const ElementType = bson_types.BsonElementType;
 const BsonSubType = bson_types.BsonSubType;
-
-pub const ExtJsonSerializer = @This();
+const regexp_max_len = 1024;
 
 pub const WriteJsonStringError = error{
     InvalidBooleanValue,
@@ -70,7 +69,7 @@ pub fn appendDocumentToJsonString(reader: anytype, writer: anytype, comptime is_
     try skipDocumentTerminatingByte(reader);
 }
 
-inline fn appendENameToJsonString(writer: anytype, reader: anytype) !void {
+fn appendENameToJsonString(writer: anytype, reader: anytype) !void {
     try writer.writeByte('"');
     try reader.streamUntilDelimiter(writer, 0x00, 1024); // TODO: handle error
     try writer.writeAll("\":");
@@ -234,11 +233,11 @@ fn appendRegexpToJsonString(writer: anytype, reader: anytype) !void {
     try writer.writeAll("{\"$regularExpression\":{\"pattern\":\"");
     var pattern_bytes = std.ArrayList(u8).init(writer.context.allocator);
     defer pattern_bytes.deinit();
-    try reader.streamUntilDelimiter(pattern_bytes.writer(), 0x00, 1024); // TODO: handle error
+    try reader.streamUntilDelimiter(pattern_bytes.writer(), 0x00, regexp_max_len); // TODO: handle error
+
     const pattern_bytes_slice = try pattern_bytes.toOwnedSlice();
 
     try std.json.encodeJsonStringChars(pattern_bytes_slice, .{ .escape_unicode = true }, writer);
-
     try writer.writeAll("\",\"options\":\"");
     try reader.streamUntilDelimiter(writer, 0x00, 5); // TODO: handle error
     try writer.writeAll("\"}}");

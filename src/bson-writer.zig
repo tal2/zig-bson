@@ -261,12 +261,12 @@ pub fn updateLenMarker(raw_data: []u8, at: usize, len: usize) void {
     var bson_new_len_marker = std.mem.toBytes(@as(i32, @intCast(len)));
     bson_new_len_marker = @bitCast(if (native_endian == .little) bson_new_len_marker else @byteSwap(bson_new_len_marker));
 
-    std.mem.copyForwards(u8, raw_data[at .. at + @sizeOf(i32)], &bson_new_len_marker);
+    @memcpy(raw_data[at .. at + @sizeOf(i32)], &bson_new_len_marker);
 }
 
 pub fn overwriteElementType(raw_data: []u8, at: usize, element_type: ElementType) void {
     var element_type_bytes = std.mem.toBytes(@as(i8, @intFromEnum(element_type)));
     element_type_bytes = @bitCast(if (native_endian == .little) element_type_bytes else @byteSwap(element_type_bytes));
 
-    std.mem.copyForwards(u8, raw_data[at .. at + @sizeOf(i8)], &element_type_bytes);
+    @memcpy(raw_data[at .. at + @sizeOf(i8)], &element_type_bytes);
 }

@@ -443,7 +443,7 @@ test "write bson to json with int32 min value - /bson-corpus/tests/int32.json" {
     defer arena_allocator.free(json_string);
     try testing.expectEqualSlices(u8, "{\"i\":-2147483648}", json_string);
 
-    const bson_document_from_json = try ExtJsonParser.jsonStringToBson(json_string, arena_allocator);
+    const bson_document_from_json = try ExtJsonParser.jsonStringToBson(arena_allocator, json_string);
     defer arena_allocator.destroy(bson_document_from_json);
     try testing.expectEqualSlices(u8, &expected_data, bson_document_from_json.raw_data);
 
@@ -451,8 +451,8 @@ test "write bson to json with int32 min value - /bson-corpus/tests/int32.json" {
     defer arena_allocator.free(extjson_string);
     try testing.expectEqualSlices(u8, "{\"i\":{\"$numberInt\":\"-2147483648\"}}", extjson_string);
 
-    const bson_document_from_extjson = try ExtJsonParser.jsonStringToBson(extjson_string, arena_allocator);
-    defer arena_allocator.destroy(bson_document_from_extjson);
+    var bson_document_from_extjson = try ExtJsonParser.jsonStringToBson(arena_allocator, extjson_string);
+    defer bson_document_from_extjson.deinit(arena_allocator);
     try testing.expectEqualSlices(u8, &expected_data, bson_document_from_extjson.raw_data);
 }
 
@@ -1244,7 +1244,7 @@ test "array1 of int32s" {
     defer arena_allocator.free(json_string);
     try testing.expectEqualSlices(u8, "{\"array1\":[3,4]}", json_string);
 
-    const parsed_document = try ExtJsonParser.jsonStringToBson(json_string, arena_allocator);
+    const parsed_document = try ExtJsonParser.jsonStringToBson(arena_allocator, json_string);
     defer arena_allocator.destroy(parsed_document);
 
     try testing.expectEqualSlices(u8, &expected_data, parsed_document.raw_data);
@@ -1410,7 +1410,7 @@ test "array1 of int32 - extended json" {
     const arena_allocator = arena.allocator();
 
     const json_string = "{\"a\":[{\"$numberInt\":\"10\"}]}";
-    const bson_document = try ExtJsonParser.jsonStringToBson(json_string, arena_allocator);
+    const bson_document = try ExtJsonParser.jsonStringToBson(arena_allocator, json_string);
     defer arena_allocator.destroy(bson_document);
 
     const json_string_relaxed = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, false);
@@ -1424,7 +1424,7 @@ test "regex options - handle unsorted options" {
     const arena_allocator = arena.allocator();
 
     const json_string = "{\"a\":{\"$regularExpression\":{\"pattern\":\"^[a-z]+$\",\"options\":\"mi\"}}}";
-    const bson_document = try ExtJsonParser.jsonStringToBson(json_string, arena_allocator);
+    const bson_document = try ExtJsonParser.jsonStringToBson(arena_allocator, json_string);
     defer arena_allocator.destroy(bson_document);
 
     const json_string_relaxed = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, false);
@@ -1438,5 +1438,5 @@ test "regex options - handle invalid options" {
     const arena_allocator = arena.allocator();
 
     const json_string = "{\"a\":{\"$regularExpression\":{\"pattern\":\"^[a-z]+$\",\"options\":\"q\"}}}";
-    try testing.expectError(JsonParsingRegExpError.InvalidRegExpOptions, ExtJsonParser.jsonStringToBson(json_string, arena_allocator));
+    try testing.expectError(JsonParsingRegExpError.InvalidRegExpOptions, ExtJsonParser.jsonStringToBson(arena_allocator, json_string));
 }

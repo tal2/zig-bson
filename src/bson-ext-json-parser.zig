@@ -46,7 +46,7 @@ const overwriteElementType = BsonWriter.overwriteElementType;
 const appendDocumentLenPlaceholder = BsonWriter.appendDocumentLenPlaceholder;
 const overwriteDocumentLenPlaceholder = BsonWriter.overwriteDocumentLenPlaceholder;
 
-pub fn jsonStringToBson(json_string: []const u8, allocator: Allocator) !*BsonDocument {
+pub fn jsonStringToBson(allocator: Allocator, json_string: []const u8) !*BsonDocument {
     var data_writer = std.ArrayList(u8).init(allocator);
     defer data_writer.deinit();
 

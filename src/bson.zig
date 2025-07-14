@@ -7,6 +7,7 @@ pub const BsonDocument = struct {
 
     pub fn deinit(self: *BsonDocument, allocator: Allocator) void {
         allocator.free(self.raw_data);
+        allocator.destroy(self);
     }
 };
 

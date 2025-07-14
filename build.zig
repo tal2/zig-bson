@@ -4,7 +4,7 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
 
     const optimize = b.standardOptimizeOption(.{});
-    const lib_mod = b.createModule(.{
+    const lib_mod = b.addModule("bson", .{
         .root_source_file = b.path("src/bson.zig"),
         .target = target,
         .optimize = optimize,
@@ -27,14 +27,14 @@ pub fn build(b: *std.Build) void {
 
     const lib = b.addLibrary(.{
         .linkage = .static,
-        .name = "zig_bson",
+        .name = "bson",
         .root_module = lib_mod,
     });
 
     b.installArtifact(lib);
 
     const exe = b.addExecutable(.{
-        .name = "zig_bson",
+        .name = "bson",
         .root_module = exe_mod,
     });
 

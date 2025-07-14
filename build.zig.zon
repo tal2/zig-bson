@@ -1,11 +1,11 @@
 .{
-    .name = .zig_bson,
+    .name = .bson,
 
     .version = "0.0.0",
 
-    .fingerprint = 0x66d9ee49020d0a4d, // Changing this has security and trust implications.
+    .fingerprint = 0xaeb30daa40715de5, // Changing this has security and trust implications.
 
-    .minimum_zig_version = "0.14.0",
+    .minimum_zig_version = "0.14.1",
 
     .dependencies = .{
         .binary_coded_decimal = .{

@@ -4,6 +4,8 @@ const Allocator = std.mem.Allocator;
 const jsonStringToBson = @import("bson-ext-json-parser.zig").jsonStringToBson;
 const ext_json_serializer = @import("bson-ext-json-serializer.zig");
 
+pub const bson_types = @import("bson-types.zig");
+
 pub const BsonDocument = struct {
     len: usize,
     raw_data: []const u8,

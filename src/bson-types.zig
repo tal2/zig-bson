@@ -51,8 +51,10 @@ pub const BsonElementType = enum(i8) {
                 i8 => .int32,
                 i16 => .int32,
                 i32 => .int32,
+                comptime_int => .int32,
                 f32 => .double,
                 f64 => .double,
+                comptime_float => .double,
                 i64 => .int64,
                 f128 => .decimal128,
                 bool => .boolean,
@@ -63,7 +65,18 @@ pub const BsonElementType = enum(i8) {
                     if (type_info == .pointer) {
                         return switch (type_info.pointer.size) {
                             .many, .slice => .array,
-                            else => @panic("unexpected pointer type"),
+                            .one => {
+                                const type_info_child = @typeInfo(type_info.pointer.child);
+
+                                if (type_info_child.array.child == u8) {
+                                    // TODO: verify that this can also be deserialized
+                                    return .string;
+                                }
+                                @panic("unexpected pointer type");
+                            },
+                            else => {
+                                @panic("unexpected pointer type");
+                            },
                         };
                     }
                     @panic("Unsupported type");

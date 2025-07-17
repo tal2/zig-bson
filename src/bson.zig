@@ -1,6 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
+const bson_writer = @import("bson-writer.zig");
 const jsonStringToBson = @import("bson-ext-json-parser.zig").jsonStringToBson;
 const ext_json_serializer = @import("bson-ext-json-serializer.zig");
 
@@ -49,6 +50,14 @@ pub const BsonDocument = struct {
 
     pub fn fromJsonString(allocator: Allocator, json_string: []const u8) !*BsonDocument {
         return try jsonStringToBson(allocator, json_string);
+    }
+
+    pub fn fromObject(allocator: Allocator, comptime T: type, obj: T) !*BsonDocument {
+        return try bson_writer.writeToBson(
+            T,
+            obj,
+            allocator,
+        );
     }
 };
 

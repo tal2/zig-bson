@@ -36,7 +36,7 @@ pub fn parseUtcDateTimeISO8601(date_time_string: []const u8) !i64 {
     const hour = try parseInt(i32, date_time_string[11..13], 10);
     const minute = try parseInt(u16, date_time_string[14..16], 10);
     const second = try parseInt(u8, date_time_string[17..19], 10);
-    const ms = if (date_time_string.len > 20) try parseInt(u9, date_time_string[20..23], 10) else 0;
+    const ms = if (date_time_string.len > 20) try parseInt(u10, date_time_string[20..23], 10) else 0;
 
     var result: i64 =
         second +

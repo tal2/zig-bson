@@ -1,7 +1,9 @@
 const std = @import("std");
 const Decimal128 = @import("binary_coded_decimal");
+const datetime = @import("datetime.zig");
 
 const Allocator = std.mem.Allocator;
+pub const JsonParseError = error{UnexpectedToken} || std.json.Scanner.NextError;
 
 pub const ElementTypeError = error{
     UnknownElementType,
@@ -171,13 +173,17 @@ pub const BsonSubType = enum(u8) {
     _,
 };
 
-pub const BsonObjectIdError = Allocator.Error || error{ ValueSizeNot24Bytes, InvalidCharacter };
+pub const BsonObjectIdError = Allocator.Error || error{ ValueSizeNot24Bytes, InvalidCharacter, UnexpectedToken };
 
 pub const BsonObjectId = struct {
     pub const bson_object_id_size = 12;
     pub const bson_object_id_as_string_size = bson_object_id_size * 2;
 
     value: []u8,
+
+    pub fn isEqualTo(self: *const BsonObjectId, b: *const BsonObjectId) bool {
+        return std.mem.eql(u8, self.value, b.value);
+    }
 
     pub fn fromString(allocator: Allocator, value: []const u8) BsonObjectIdError!BsonObjectId {
         if (value.len != bson_object_id_as_string_size) {
@@ -186,6 +192,31 @@ pub const BsonObjectId = struct {
 
         const value_buf = try allocator.alloc(u8, bson_object_id_size);
         return BsonObjectId{ .value = std.fmt.hexToBytes(value_buf, value) catch unreachable };
+    }
+
+    pub fn jsonParse(allocator: Allocator, source: *std.json.Scanner, options: std.json.ParseOptions) JsonParseError!BsonObjectId {
+        _ = options;
+
+        var token = try source.next();
+        if (token != .object_begin) return error.UnexpectedToken;
+
+        token = try source.next();
+        if (token != .string or !std.mem.eql(u8, token.string, "$oid")) {
+            return error.UnexpectedToken;
+        }
+
+        token = try source.next();
+        if (token != .string) return error.UnexpectedToken;
+
+        const value = token.string;
+        if (value.len != bson_object_id_as_string_size) {
+            return error.UnexpectedToken;
+        }
+
+        token = try source.next();
+        if (token != .object_end) return error.UnexpectedToken;
+
+        return BsonObjectId.fromString(allocator, value) catch return error.UnexpectedToken;
     }
 };
 
@@ -197,6 +228,14 @@ pub const BsonTimestamp = struct {
             .value = @as(u64, @intCast(value)),
         };
     }
+
+    pub fn jsonParse(allocator: Allocator, source: *std.json.Scanner, options: std.json.ParseOptions) JsonParseError!BsonTimestamp {
+        _ = options;
+
+        _ = allocator;
+        _ = source;
+        @panic("not implemented");
+    }
 };
 
 pub const BsonUtcDatetime = struct {
@@ -206,6 +245,31 @@ pub const BsonUtcDatetime = struct {
         return BsonUtcDatetime{
             .value = value,
         };
+    }
+
+    pub fn jsonParse(allocator: Allocator, source: *std.json.Scanner, options: std.json.ParseOptions) JsonParseError!BsonUtcDatetime {
+        _ = allocator;
+        _ = options;
+
+        var token = try source.next();
+        if (token != .object_begin) return error.UnexpectedToken;
+
+        token = try source.next();
+        if (token != .string or !std.mem.eql(u8, token.string, "$date")) {
+            return error.UnexpectedToken;
+        }
+        const value_token = try source.next();
+
+        token = try source.next();
+        if (token != .object_end) return error.UnexpectedToken;
+
+        const value = switch (value_token) {
+            .string => datetime.parseUtcDateTimeISO8601(value_token.string) catch return error.UnexpectedToken,
+            .number => std.fmt.parseInt(i64, value_token.number, 10) catch return error.UnexpectedToken,
+            else => return error.UnexpectedToken,
+        };
+
+        return BsonUtcDatetime.fromInt64(value);
     }
 };
 
@@ -218,6 +282,14 @@ pub const BsonBinary = struct {
             .value = value,
             .sub_type = sub_type,
         };
+    }
+
+    pub fn jsonParse(allocator: Allocator, source: *std.json.Scanner, options: std.json.ParseOptions) !BsonBinary {
+        _ = options;
+
+        _ = allocator;
+        _ = source;
+        @panic("not implemented");
     }
 };
 

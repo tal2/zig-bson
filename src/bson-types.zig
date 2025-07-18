@@ -68,9 +68,19 @@ pub const BsonElementType = enum(i8) {
                             .one => {
                                 const type_info_child = @typeInfo(type_info.pointer.child);
 
-                                if (type_info_child.array.child == u8) {
-                                    // TODO: verify that this can also be deserialized
-                                    return .string;
+                                switch (type_info_child) {
+                                    .array => {
+                                        if (type_info_child.array.child == u8) {
+                                            // TODO: verify that this can also be deserialized
+                                            return .string;
+                                        }
+                                    },
+                                    else => {
+                                        @compileLog("unexpected pointer type size: one");
+                                        @compileLog(@typeName(T));
+                                        @compileLog(@typeName(type_info.pointer.child));
+                                        @panic("unexpected pointer type");
+                                    },
                                 }
                                 @panic("unexpected pointer type");
                             },

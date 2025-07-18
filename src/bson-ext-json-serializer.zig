@@ -18,7 +18,7 @@ pub const WriteJsonStringError = error{
 };
 pub const FloatFormatCanonicalExtendedJsonError = std.fmt.format_float.FormatError || error{OutOfMemory};
 
-pub fn toJsonString(doc: *bson.BsonDocument, allocator: std.mem.Allocator, comptime is_strict_ext_json: bool) ![]const u8 {
+pub fn toJsonString(doc: *const bson.BsonDocument, allocator: std.mem.Allocator, comptime is_strict_ext_json: bool) ![]const u8 {
     var list = std.ArrayList(u8).init(allocator);
     errdefer list.deinit();
 

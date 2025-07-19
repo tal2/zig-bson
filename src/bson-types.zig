@@ -1,6 +1,9 @@
 const std = @import("std");
+const time = std.time;
 const Decimal128 = @import("binary_coded_decimal");
 const datetime = @import("datetime.zig");
+
+pub const BsonObjectId = @import("object-id.zig").BsonObjectId;
 
 const Allocator = std.mem.Allocator;
 pub const JsonParseError = error{UnexpectedToken} || std.json.Scanner.NextError;
@@ -196,53 +199,6 @@ pub const BsonSubType = enum(u8) {
     _,
 };
 
-pub const BsonObjectIdError = Allocator.Error || error{ ValueSizeNot24Bytes, InvalidCharacter, UnexpectedToken };
-
-pub const BsonObjectId = struct {
-    pub const bson_object_id_size = 12;
-    pub const bson_object_id_as_string_size = bson_object_id_size * 2;
-
-    value: []u8,
-
-    pub fn isEqualTo(self: *const BsonObjectId, b: *const BsonObjectId) bool {
-        return std.mem.eql(u8, self.value, b.value);
-    }
-
-    pub fn fromString(allocator: Allocator, value: []const u8) BsonObjectIdError!BsonObjectId {
-        if (value.len != bson_object_id_as_string_size) {
-            return BsonObjectIdError.ValueSizeNot24Bytes;
-        }
-
-        const value_buf = try allocator.alloc(u8, bson_object_id_size);
-        return BsonObjectId{ .value = std.fmt.hexToBytes(value_buf, value) catch unreachable };
-    }
-
-    pub fn jsonParse(allocator: Allocator, source: *std.json.Scanner, options: std.json.ParseOptions) JsonParseError!BsonObjectId {
-        _ = options;
-
-        var token = try source.next();
-        if (token != .object_begin) return error.UnexpectedToken;
-
-        token = try source.next();
-        if (token != .string or !std.mem.eql(u8, token.string, "$oid")) {
-            return error.UnexpectedToken;
-        }
-
-        token = try source.next();
-        if (token != .string) return error.UnexpectedToken;
-
-        const value = token.string;
-        if (value.len != bson_object_id_as_string_size) {
-            return error.UnexpectedToken;
-        }
-
-        token = try source.next();
-        if (token != .object_end) return error.UnexpectedToken;
-
-        return BsonObjectId.fromString(allocator, value) catch return error.UnexpectedToken;
-    }
-};
-
 pub const BsonTimestamp = struct {
     value: u64,
 
@@ -357,3 +313,7 @@ pub const RegexpOptions = enum(u8) {
 };
 
 pub const BsonDecimal128 = Decimal128;
+
+test {
+    _ = @import("object-id.zig");
+}

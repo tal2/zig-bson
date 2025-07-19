@@ -7,6 +7,7 @@ const jsonStringToBson = ext_json_parser.jsonStringToBson;
 const ext_json_serializer = @import("bson-ext-json-serializer.zig");
 
 pub const bson_types = @import("bson-types.zig");
+pub const BsonObjectIdGenerator = @import("object-id-generator.zig").BsonObjectIdGenerator;
 
 pub const BsonDocument = struct {
     len: usize,
@@ -40,7 +41,7 @@ pub const BsonDocument = struct {
         return document;
     }
 
-    pub fn deinit(self: *BsonDocument, allocator: Allocator) void {
+    pub fn deinit(self: *const BsonDocument, allocator: Allocator) void {
         allocator.free(self.raw_data);
         allocator.destroy(self);
     }
@@ -69,4 +70,6 @@ pub const BsonDocument = struct {
 test {
     _ = @import("datetime.zig");
     _ = @import("bson-tests.zig");
+    _ = @import("bson-types.zig");
+    _ = @import("object-id-generator.zig");
 }

@@ -77,10 +77,8 @@ pub fn parseJsonToBson(data_writer: *std.ArrayList(u8), data_reader: anytype, st
     // TODO: verify reader is valid JsonReader
 
     var current_token: std.json.Token = try data_reader.next();
-    std.debug.print("current_token {any}\n", .{current_token});
     loop: while (true) : (current_token = try data_reader.next()) {
         const token = current_token;
-        std.debug.print("token {any}\n", .{token});
         switch (token) {
             .object_begin => {
                 try stack.append(data_writer.items.len);

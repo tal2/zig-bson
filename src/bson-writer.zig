@@ -129,7 +129,7 @@ pub inline fn appendElementValue(writer: *std.ArrayList(u8), field_element_type:
             try appendByte(writer, @as(u8, if (field_value) 1 else 0));
         },
         .object_id => {
-            try writer.appendSlice(field_value.value);
+            try writer.appendSlice(&field_value.value);
         },
         else => {
             @panic("Unsupported type: " ++ @typeName(FieldType));

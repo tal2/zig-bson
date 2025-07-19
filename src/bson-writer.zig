@@ -84,10 +84,22 @@ pub inline fn appendElementType(writer: *std.ArrayList(u8), element_type: Elemen
 pub inline fn appendElementValue(writer: *std.ArrayList(u8), field_element_type: ElementType, FieldType: type, field_value: anytype) BsonAppendError!void {
     switch (field_element_type) {
         .int32 => {
-            try appendInt32(writer, field_value);
+            if (@TypeOf(field_value) == usize) {
+                try appendInt32(writer, @as(i32, @intCast(field_value)));
+            } else {
+                try appendInt32(writer, field_value);
+            }
         },
         .int64 => {
-            try appendInt64(writer, field_value);
+            if (@TypeOf(field_value) == usize) {
+                try appendInt64(writer, @as(i64, @intCast(field_value)));
+            } else {
+                try appendInt64(writer, field_value);
+            }
+        },
+        .double => {
+            //TODO: test
+            try appendDouble(writer, field_value);
         },
         .decimal128 => {
             try appendDecimal128(writer, field_value);

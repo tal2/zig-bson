@@ -64,6 +64,13 @@ pub const BsonElementType = enum(i8) {
                 []u8 => .string,
                 []const u8 => .string,
                 [:0]const u8 => .string,
+                usize => {
+                    return comptime if (@sizeOf(usize) == @sizeOf(i64))
+                        .int64
+                    else
+                        .int32;
+                },
+
                 else => {
                     if (type_info == .pointer) {
                         return switch (type_info.pointer.size) {

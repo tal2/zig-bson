@@ -2,7 +2,6 @@ const std = @import("std");
 const builtin = @import("builtin");
 const datetime = @import("datetime.zig");
 const utils = @import("utils.zig");
-const colors = @import("colors.zig");
 const bson_types = @import("bson-types.zig");
 const bson = @import("bson.zig");
 const BsonDocument = bson.BsonDocument;

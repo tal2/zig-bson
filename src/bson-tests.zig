@@ -1194,6 +1194,33 @@ test "write bson to json with datetime: Y10K - /bson-corpus/tests/datetime.json"
     try testing.expectEqualSlices(u8, "{\"a\":{\"$date\":{\"$numberLong\":\"253402300800000\"}}}", extjson_string);
 }
 
+test "null value" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const arena_allocator = arena.allocator();
+
+    const doc = .{ .name = null };
+
+    const bson_document = try BsonWriter.writeToBson(@TypeOf(doc), doc, arena_allocator);
+    defer arena_allocator.destroy(bson_document);
+
+    const expected_data =
+        // document length (int 32)
+        [_]u8{ @as(u8, 11), 0, 0, 0 } ++
+        // field type (int 8)
+        [_]u8{@as(u8, @intFromEnum(ElementType.null))} ++
+        // field name (null-terminated string)
+        "name".* ++ [_]u8{0} ++
+        // no field value (null)
+        // document null terminator (int 8)
+        [_]u8{0};
+
+    try testing.expectEqualSlices(u8, &expected_data, bson_document.raw_data);
+    const json_string = try bson_document.toJsonString(arena_allocator, false);
+    defer arena_allocator.free(json_string);
+    try testing.expectEqualSlices(u8, "{\"name\":null}", json_string);
+}
+
 test "array1 of int32s" {
     var arena = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena.deinit();

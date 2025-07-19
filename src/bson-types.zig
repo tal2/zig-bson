@@ -38,7 +38,9 @@ pub const BsonElementType = enum(i8) {
     _,
 
     pub fn typeToElementType(comptime T: type) BsonElementType {
+        if (T == @TypeOf(null)) return .null;
         const type_info = @typeInfo(T);
+
         return switch (type_info) {
             .optional => typeToElementType(type_info.optional.child),
             // .array => .array,

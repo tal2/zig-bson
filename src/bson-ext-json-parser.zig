@@ -78,8 +78,7 @@ pub fn parseJsonToBson(data_writer: *std.ArrayList(u8), data_reader: anytype, st
 
     var current_token: std.json.Token = try data_reader.next();
     loop: while (true) : (current_token = try data_reader.next()) {
-        const token = current_token;
-        switch (token) {
+        switch (current_token) {
             .object_begin => {
                 try stack.append(data_writer.items.len);
                 try appendDocumentLenPlaceholder(data_writer);
@@ -120,7 +119,6 @@ pub fn parseJsonToBson(data_writer: *std.ArrayList(u8), data_reader: anytype, st
             },
 
             else => {
-                std.debug.print("else: {any}\n", .{token});
                 @panic("unexpected token");
             },
         }

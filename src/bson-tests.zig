@@ -1444,6 +1444,35 @@ test "array1 of int32 - extended json" {
     try testing.expectEqualSlices(u8, "{\"a\":[10]}", json_string_relaxed);
 }
 
+test "array1 of documents" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const arena_allocator = arena.allocator();
+
+    const ArrayItem = struct { a: i32 };
+
+    const ArrayDocument = struct {
+        array1: []const ArrayItem,
+    };
+
+    const doc = ArrayDocument{
+        .array1 = &[_]ArrayItem{
+            ArrayItem{ .a = 10 },
+            ArrayItem{ .a = 20 },
+        },
+    };
+
+    const bson_document = try BsonWriter.writeToBson(ArrayDocument, doc, arena_allocator);
+    defer arena_allocator.destroy(bson_document);
+
+    const json_string_relaxed = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, false);
+    defer arena_allocator.free(json_string_relaxed);
+    try testing.expectEqualSlices(u8, "{\"array1\":[{\"a\":10},{\"a\":20}]}", json_string_relaxed);
+
+    const parsed_document = try ExtJsonParser.jsonStringToBson(arena_allocator, json_string_relaxed);
+    defer arena_allocator.destroy(parsed_document);
+}
+
 test "regex options - handle unsorted options" {
     var arena = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena.deinit();

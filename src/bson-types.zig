@@ -39,11 +39,12 @@ pub const BsonElementType = enum(i8) {
 
     pub fn typeToElementType(comptime T: type) BsonElementType {
         if (T == @TypeOf(null)) return .null;
+
         const type_info = @typeInfo(T);
 
         return switch (type_info) {
             .optional => typeToElementType(type_info.optional.child),
-            // .array => .array,
+            .array => .array,
             .@"struct" => switch (T) {
                 BsonObjectId => .object_id,
                 BsonTimestamp => .timestamp,
@@ -86,6 +87,7 @@ pub const BsonElementType = enum(i8) {
                                             // TODO: verify that this can also be deserialized
                                             return .string;
                                         }
+                                        return .array;
                                     },
                                     else => {
                                         @compileLog("unexpected pointer type size: one");

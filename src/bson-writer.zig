@@ -39,9 +39,18 @@ pub fn appendDocumentToBson(comptime T: type, obj: T, data_writer: *std.ArrayLis
 pub fn writeToBsonWriter(comptime T: type, obj: T, writer: *std.ArrayList(u8)) !void {
     const type_info = @typeInfo(T);
 
+    if (type_info == .pointer) {
+        return writeToBsonWriter(type_info.pointer.child, obj.*, writer);
+    }
+
     if (type_info != .@"struct") {
         @compileLog("compile log: " ++ @typeName(T));
         @compileError("T must be a struct " ++ @typeName(T));
+    }
+
+    if (T == bson.BsonDocument) {
+        try writer.appendSlice(obj.raw_data);
+        return;
     }
 
     const start_pos = writer.items.len;

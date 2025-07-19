@@ -2,6 +2,7 @@ const std = @import("std");
 const time = std.time;
 const Decimal128 = @import("binary_coded_decimal");
 const datetime = @import("datetime.zig");
+const bson = @import("bson.zig");
 
 pub const BsonObjectId = @import("object-id.zig").BsonObjectId;
 
@@ -79,6 +80,10 @@ pub const BsonElementType = enum(i8) {
                         return switch (type_info.pointer.size) {
                             .many, .slice => .array,
                             .one => {
+                                if (type_info.pointer.child == bson.BsonDocument) {
+                                    // TODO: test
+                                    return .document;
+                                }
                                 const type_info_child = @typeInfo(type_info.pointer.child);
 
                                 switch (type_info_child) {

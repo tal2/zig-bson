@@ -113,7 +113,7 @@ pub fn parseJsonToBson(data_writer: *std.ArrayList(u8), data_reader: anytype, st
                 const element = try data_reader.next();
 
                 const current_element_type_pos = data_writer.items.len;
-                try appendElementType(data_writer, ElementType.fromToken(element));
+                try appendElementType(data_writer, try ElementType.fromToken(element));
                 try appendString(data_writer, e_name, false, true);
 
                 try parseJsonValueToBson(data_writer, data_reader, stack, element, current_element_type_pos);
@@ -200,7 +200,7 @@ fn parseArrayItemToBson(data_writer: *std.ArrayList(u8), reader: anytype, stack:
 
     const last_element_type_pos = data_writer.items.len;
 
-    const element_type = ElementType.fromToken(element);
+    const element_type = try ElementType.fromToken(element);
     try appendElementType(data_writer, element_type);
     try appendIntAsString(i32, data_writer, array_item_index, false, true);
 

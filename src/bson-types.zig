@@ -107,7 +107,7 @@ pub const BsonElementType = enum(i8) {
         };
     }
 
-    pub fn fromToken(token: std.json.Token) BsonElementType {
+    pub fn fromToken(token: std.json.Token) error{UnexpectedToken}!BsonElementType {
         switch (token) {
             .string => return .string,
             .partial_string => return .string,
@@ -123,10 +123,7 @@ pub const BsonElementType = enum(i8) {
             .true => return .boolean,
             .false => return .boolean,
             .null => return .null,
-            else => {
-                std.debug.print("Type: {any}\n", .{token});
-                @panic("Unexpected token");
-            },
+            else => return error.UnexpectedToken,
         }
     }
 

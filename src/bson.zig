@@ -65,6 +65,14 @@ pub const BsonDocument = struct {
             allocator,
         );
     }
+
+    pub fn dupe(self: *const BsonDocument, allocator: Allocator) Allocator.Error!*BsonDocument {
+        const new_data = try allocator.dupe(u8, self.raw_data);
+        const new_doc = try allocator.create(BsonDocument);
+        new_doc.len = self.len;
+        new_doc.raw_data = new_data;
+        return new_doc;
+    }
 };
 
 test {

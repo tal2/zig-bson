@@ -5,6 +5,7 @@ const utils = @import("utils.zig");
 const bson_types = @import("bson-types.zig");
 const bson = @import("bson.zig");
 const BsonDocument = bson.BsonDocument;
+const NullIgnoredFieldNames = bson.NullIgnoredFieldNames;
 const BsonWriter = @import("bson-writer.zig");
 const ExtJsonSerializer = @import("bson-ext-json-serializer.zig");
 const ExtJsonParser = @import("bson-ext-json-parser.zig");
@@ -1494,4 +1495,165 @@ test "regex options - handle invalid options" {
 
     const json_string = "{\"a\":{\"$regularExpression\":{\"pattern\":\"^[a-z]+$\",\"options\":\"q\"}}}";
     try testing.expectError(JsonParsingRegExpError.InvalidRegExpOptions, ExtJsonParser.jsonStringToBson(arena_allocator, json_string));
+}
+
+test "serialize bson with optionals" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const arena_allocator = arena.allocator();
+
+    const HelloWorldStruct = struct {
+        num: ?i32,
+    };
+
+    const person = HelloWorldStruct{
+        .num = 42,
+    };
+
+    const bson_document = try BsonWriter.writeToBson(HelloWorldStruct, person, arena_allocator);
+    defer arena_allocator.destroy(bson_document);
+
+    const expected_data =
+        // document length (int 32)
+        [_]u8{ @as(u8, 14), 0, 0, 0 } ++
+        // field type (int 8)
+        [_]u8{@as(u8, @intFromEnum(ElementType.int32))} ++
+        // field name (null-terminated string)
+        "num".* ++ [_]u8{0} ++
+        // field value
+        std.mem.toBytes(@as(i32, @intCast(42))) ++
+        // document null terminator (int 8)
+        [_]u8{0};
+
+    try testing.expectEqualSlices(u8, &expected_data, bson_document.raw_data);
+
+    const json_string = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, false);
+    defer arena_allocator.free(json_string);
+
+    try testing.expectEqualSlices(u8, "{\"num\":42}", json_string);
+}
+
+test "serialize bson with optionals and serialize field with null value" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const arena_allocator = arena.allocator();
+
+    const HelloWorldStruct = struct {
+        num1: ?i32,
+        num2: ?i32,
+    };
+
+    const person = HelloWorldStruct{
+        .num1 = 42,
+        .num2 = null,
+    };
+
+    const bson_document = try BsonWriter.writeToBson(HelloWorldStruct, person, arena_allocator);
+    defer arena_allocator.destroy(bson_document);
+
+    const expected_data =
+        // document length (int 32)
+        [_]u8{ @as(u8, 21), 0, 0, 0 } ++
+        // field type (int 8)
+        [_]u8{@as(u8, @intFromEnum(ElementType.int32))} ++
+        // field name (null-terminated string)
+        "num1".* ++ [_]u8{0} ++
+        // field value
+        std.mem.toBytes(@as(i32, @intCast(42))) ++
+        // field type (int 8)
+        [_]u8{@as(u8, @intFromEnum(ElementType.null))} ++
+        // field name (null-terminated string)
+        "num2".* ++ [_]u8{0} ++
+        // field value (null)
+        // document null terminator (int 8)
+        [_]u8{0};
+
+    try testing.expectEqualSlices(u8, &expected_data, bson_document.raw_data);
+
+    const json_string = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, false);
+    defer arena_allocator.free(json_string);
+
+    try testing.expectEqualSlices(u8, "{\"num1\":42,\"num2\":null}", json_string);
+}
+
+test "serialize bson with optionals and skip serialization of field with null value" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const arena_allocator = arena.allocator();
+
+    const HelloWorldStruct = struct {
+        pub const null_ignored_field_names: bson.NullIgnoredFieldNames = .all_optional_fields;
+
+        num1: ?i32,
+        num2: ?i32,
+    };
+
+    const person = HelloWorldStruct{
+        .num1 = 42,
+        .num2 = null,
+    };
+
+    const bson_document = try BsonWriter.writeToBson(HelloWorldStruct, person, arena_allocator);
+    defer arena_allocator.destroy(bson_document);
+
+    const expected_data =
+        // document length (int 32)
+        [_]u8{ @as(u8, 15), 0, 0, 0 } ++
+        // field type (int 8)
+        [_]u8{@as(u8, @intFromEnum(ElementType.int32))} ++
+        // field name (null-terminated string)
+        "num1".* ++ [_]u8{0} ++
+        // field value
+        std.mem.toBytes(@as(i32, @intCast(42))) ++
+        // document null terminator (int 8)
+        [_]u8{0};
+
+    try testing.expectEqualSlices(u8, &expected_data, bson_document.raw_data);
+
+    const json_string = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, false);
+    defer arena_allocator.free(json_string);
+
+    try testing.expectEqualSlices(u8, "{\"num1\":42}", json_string);
+}
+
+test "serialize bson with optionals and skip serialization of field with null value - named" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const arena_allocator = arena.allocator();
+
+    const HelloWorldStruct = struct {
+        pub const null_ignored_field_names: bson.NullIgnoredFieldNames = .{
+            .named_optional_fields = &[_][]const u8{"num2"},
+        };
+
+        num1: ?i32,
+        num2: ?i32,
+    };
+
+    const person = HelloWorldStruct{
+        .num1 = null,
+        .num2 = null,
+    };
+
+    const bson_document = try BsonWriter.writeToBson(HelloWorldStruct, person, arena_allocator);
+    defer arena_allocator.destroy(bson_document);
+
+    const expected_data =
+        // document length (int 32)
+        [_]u8{ @as(u8, 11), 0, 0, 0 } ++
+        // field type (int 8)
+        [_]u8{@as(u8, @intFromEnum(ElementType.null))} ++
+        // field name (null-terminated string)
+        "num1".* ++ [_]u8{0} ++
+        // field value (null)
+        //
+        // document null terminator (int 8)
+        [_]u8{0};
+
+    try testing.expectEqualSlices(u8, &expected_data, bson_document.raw_data);
+
+    const json_string = try ExtJsonSerializer.toJsonString(bson_document, arena_allocator, false);
+    defer arena_allocator.free(json_string);
+
+    try testing.expectEqualSlices(u8, "{\"num1\":null}", json_string);
 }

@@ -7,6 +7,7 @@ const jsonStringToBson = ext_json_parser.jsonStringToBson;
 const ext_json_serializer = @import("bson-ext-json-serializer.zig");
 
 pub const bson_types = @import("bson-types.zig");
+pub const NullIgnoredFieldNames = bson_writer.NullIgnoredFieldNames;
 
 pub const BsonDocument = struct {
     len: usize,

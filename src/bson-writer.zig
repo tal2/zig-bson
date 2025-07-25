@@ -17,6 +17,13 @@ const BsonSubType = bson_types.BsonSubType;
 const BsonObjectId = bson_types.BsonObjectId;
 const BsonDecimal128 = bson_types.BsonDecimal128;
 
+pub const NullIgnoredFieldNames = union(enum) {
+    pub const name_as_field = "null_ignored_field_names";
+
+    all_optional_fields: void,
+    named_optional_fields: []const []const u8,
+};
+
 pub const BsonAppendError = std.fmt.BufPrintError || Allocator.Error || error{InvalidObjectId};
 
 pub fn writeToBson(comptime T: type, obj: T, allocator: Allocator) BsonAppendError!*BsonDocument {
@@ -39,13 +46,25 @@ pub fn appendDocumentToBson(comptime T: type, obj: T, data_writer: *std.ArrayLis
 pub fn writeToBsonWriter(comptime T: type, obj: T, writer: *std.ArrayList(u8)) !void {
     const type_info = @typeInfo(T);
 
-    if (type_info == .pointer) {
-        return writeToBsonWriter(type_info.pointer.child, obj.*, writer);
-    }
-
-    if (type_info != .@"struct") {
-        @compileLog("compile log: " ++ @typeName(T));
-        @compileError("T must be a struct " ++ @typeName(T));
+    switch (type_info) {
+        .@"struct" => {
+            // continue
+        },
+        .pointer => {
+            return writeToBsonWriter(type_info.pointer.child, obj.*, writer);
+        },
+        .optional => {
+            const value = obj.?;
+            return writeToBsonWriter(@TypeOf(value), value, writer);
+        },
+        .@"union" => {
+            @compileLog(@typeName(T));
+            @compileError("not yet implemented");
+        },
+        else => {
+            @compileLog("not supported: " ++ @typeName(T));
+            @compileError("type not supported");
+        },
     }
 
     if (T == bson.BsonDocument) {
@@ -58,24 +77,48 @@ pub fn writeToBsonWriter(comptime T: type, obj: T, writer: *std.ArrayList(u8)) !
     try appendDocumentLenPlaceholder(writer);
 
     inline for (type_info.@"struct".fields) |field| {
-        const field_value_pre = @field(obj, field.name);
+        if (!std.mem.eql(u8, field.name, NullIgnoredFieldNames.name_as_field)) {
+            const field_value_pre = @field(obj, field.name);
 
-        const is_optional = comptime @typeInfo(field.type) == .optional;
+            const is_optional = comptime @typeInfo(field.type) == .optional;
 
-        if (is_optional and field_value_pre == null) {
-            try appendElementType(writer, ElementType.null);
+            if (is_optional and field_value_pre == null) {
+                const keep_null_field = comptime keep_null_field: {
+                    if (@hasDecl(T, NullIgnoredFieldNames.name_as_field)) {
+                        const null_ignored_field_names: NullIgnoredFieldNames = @field(T, NullIgnoredFieldNames.name_as_field);
 
-            const field_name = field.name;
-            try appendString(writer, field_name, false, true);
-        } else {
-            const field_value = if (is_optional) field_value_pre.? else field_value_pre;
-            const field_element_type = comptime ElementType.typeToElementType(field.type);
+                        switch (null_ignored_field_names) {
+                            .all_optional_fields => {
+                                break :keep_null_field false;
+                            },
+                            .named_optional_fields => |named_fields| {
+                                for (named_fields) |null_ignored_field_name| {
+                                    if (std.mem.eql(u8, null_ignored_field_name, field.name)) {
+                                        break :keep_null_field false;
+                                    }
+                                }
+                            },
+                        }
+                    }
+                    break :keep_null_field true;
+                };
 
-            try appendElementType(writer, field_element_type);
+                if (keep_null_field) {
+                    try appendElementType(writer, ElementType.null);
+                    const field_name = field.name;
+                    try appendString(writer, field_name, false, true);
+                }
+            } else {
+                const field_value = if (is_optional) field_value_pre.? else field_value_pre;
 
-            const field_name = field.name;
-            try appendString(writer, field_name, false, true);
-            try appendElementValue(writer, field_element_type, field.type, field_value);
+                const field_element_type = comptime ElementType.typeToElementType(field.type);
+
+                try appendElementType(writer, field_element_type);
+
+                const field_name = field.name;
+                try appendString(writer, field_name, false, true);
+                try appendElementValue(writer, field_element_type, field.type, field_value);
+            }
         }
     }
     try appendNullTerminator(writer);

@@ -5,9 +5,15 @@ const bson_writer = @import("bson-writer.zig");
 const ext_json_parser = @import("bson-ext-json-parser.zig");
 const jsonStringToBson = ext_json_parser.jsonStringToBson;
 const ext_json_serializer = @import("bson-ext-json-serializer.zig");
-
+const bson_iterator = @import("bson-iterator.zig");
 pub const bson_types = @import("bson-types.zig");
+const bson_parser = @import("bson-parser.zig");
+
+pub const BsonElement = bson_iterator.BsonElement;
+pub const BsonValue = bson_iterator.BsonValue;
 pub const NullIgnoredFieldNames = bson_writer.NullIgnoredFieldNames;
+pub const BsonDocumentIterator = bson_iterator.BsonDocumentIterator;
+pub const BsonDocumentView = @import("./document-view.zig").BsonDocumentView;
 
 pub const BsonDocument = struct {
     len: usize,
@@ -74,6 +80,12 @@ pub const BsonDocument = struct {
         );
     }
 
+    pub fn toObject(doc: *const BsonDocument, allocator: Allocator, comptime T: type, options: bson_parser.ParseBsonToObjectOptions) !*T {
+        const instance = try allocator.create(T);
+        try bson_parser.parseBsonToObject(allocator, T, instance, doc, options);
+        return instance;
+    }
+
     pub fn dupe(self: *const BsonDocument, allocator: Allocator) Allocator.Error!*BsonDocument {
         const new_data = try allocator.dupe(u8, self.raw_data);
         const new_doc = try allocator.create(BsonDocument);
@@ -87,4 +99,5 @@ test {
     _ = @import("datetime.zig");
     _ = @import("bson-tests.zig");
     _ = @import("bson-types.zig");
+    _ = @import("bson-parser.zig");
 }

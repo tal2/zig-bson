@@ -176,13 +176,12 @@ pub const BsonElement = struct {
         new_element.pos = self.pos;
         new_element.size = self.size;
         new_element.type = self.type;
-        new_element.parent_bytes = try allocator.dupe(u8, self.parent_bytes);
+        new_element.parent_bytes = self.parent_bytes;
         return new_element;
     }
 
     pub fn deinit(self: *const BsonElement, allocator: Allocator) void {
         if (self.name) |name| allocator.free(name);
-        allocator.free(self.parent_bytes);
         allocator.destroy(self);
     }
 
@@ -203,14 +202,18 @@ pub const BsonElement = struct {
         var array_list = std.ArrayList(T).init(allocator);
         defer array_list.deinit();
 
-        var array = try BsonValArray.fromBytes(self.getValueBytes());
+        var array = try BsonValArray.fromBytes(allocator, self.getValueBytes());
         if (comptime @typeInfo(T) == .@"struct" or (@typeInfo(T) == .pointer and @typeInfo(@typeInfo(T).pointer.child) == .@"struct")) {
             while (try array.next()) |item| {
+                if (item.name) |name| allocator.free(name);
+
                 const value = try item.getValueAsWithAllocator(allocator, T);
                 try array_list.append(value);
             }
         } else {
             while (try array.next()) |item| {
+                if (item.name) |name| allocator.free(name);
+
                 const value = try item.getValueAs(T);
                 try array_list.append(value);
             }
@@ -225,7 +228,7 @@ pub const BsonElement = struct {
             return .{ .document = try BsonDocument.loadFromBytes(allocator, self.getValueBytes()) };
         }
         if (self.type == .array) {
-            return .{ .array = try BsonValArray.fromBytes(self.getValueBytes()) };
+            return .{ .array = try BsonValArray.fromBytes(allocator, self.getValueBytes()) };
         }
 
         return getValue(self) catch |err| {
@@ -472,25 +475,26 @@ pub const BsonValue = union(enum) {
             .document => |doc| doc.deinit(allocator),
             .array => |arr| arr.deinit(allocator),
             .binary => |bin| allocator.free(bin),
-            .string => |str| allocator.free(str),
             else => {},
         }
     }
 };
 
 pub const BsonValArray = struct {
+    allocator: Allocator,
     next_array_index: usize = 0,
     fbs: std.io.FixedBufferStream([]const u8),
 
-    pub fn deinit(self: *BsonValArray, allocator: Allocator) void {
+    pub fn deinit(self: *const BsonValArray, allocator: Allocator) void {
         _ = allocator;
         _ = self;
     }
 
-    pub fn fromBytes(bytes: []const u8) !BsonValArray {
+    pub fn fromBytes(allocator: Allocator, bytes: []const u8) !BsonValArray {
         var fbs = std.io.fixedBufferStream(bytes);
         fbs.pos = @sizeOf(i32); // skip the array document length
         return .{
+            .allocator = allocator,
             .fbs = fbs,
         };
     }
@@ -554,9 +558,10 @@ pub const BsonValArray = struct {
         } else {
             try self.fbs.seekBy(@as(i64, @intCast(doc_size)));
         }
+
         return BsonElement{
             .type = element_type,
-            .name = element_item_name,
+            .name = try self.allocator.dupe(u8, element_item_name),
             .pos = value_pos,
             .size = doc_size,
             .parent_bytes = self.fbs.buffer,

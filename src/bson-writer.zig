@@ -79,8 +79,8 @@ pub fn writeToBsonWriter(comptime T: type, obj: T, writer: *std.ArrayList(u8)) !
     inline for (type_info.@"struct".fields) |field| {
         if (!std.mem.eql(u8, field.name, NullIgnoredFieldNames.name_as_field)) {
             const field_value_pre = @field(obj, field.name);
-
-            const is_optional = comptime @typeInfo(field.type) == .optional;
+            const field_type_info = comptime @typeInfo(field.type);
+            const is_optional = comptime field_type_info == .optional;
 
             if (is_optional and field_value_pre == null) {
                 const keep_null_field = comptime keep_null_field: {
@@ -110,14 +110,26 @@ pub fn writeToBsonWriter(comptime T: type, obj: T, writer: *std.ArrayList(u8)) !
                 }
             } else {
                 const field_value = if (is_optional) field_value_pre.? else field_value_pre;
-
-                const field_element_type = comptime ElementType.typeToElementType(field.type);
-
-                try appendElementType(writer, field_element_type);
-
                 const field_name = field.name;
-                try appendString(writer, field_name, false, true);
-                try appendElementValue(writer, field_element_type, field.type, field_value);
+
+                if (comptime @typeInfo(@TypeOf(field_value)) == .@"union") {
+                    const field_value_type_info = comptime @typeInfo(field_type_info.optional.child);
+                    inline for (field_value_type_info.@"union".fields) |union_field_info| {
+                        if (std.mem.eql(u8, @tagName(field_value), union_field_info.name)) {
+                            const union_value = @field(field_value, union_field_info.name);
+                            const union_field_element_type = comptime ElementType.typeToElementType(union_field_info.type);
+                            try appendElementType(writer, union_field_element_type);
+                            try appendString(writer, field_name, false, true);
+                            try appendElementValue(writer, union_field_element_type, union_field_info.type, union_value);
+                        }
+                    }
+                } else {
+                    const field_element_type = comptime ElementType.typeToElementType(field.type);
+
+                    try appendElementType(writer, field_element_type);
+                    try appendString(writer, field_name, false, true);
+                    try appendElementValue(writer, field_element_type, field.type, field_value);
+                }
             }
         }
     }

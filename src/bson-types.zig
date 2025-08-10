@@ -46,6 +46,7 @@ pub const BsonElementType = enum(i8) {
         return switch (type_info) {
             .optional => typeToElementType(type_info.optional.child),
             .array => .array,
+            .@"union" => unreachable,
             .@"struct" => switch (T) {
                 BsonObjectId => .object_id,
                 BsonTimestamp => .timestamp,

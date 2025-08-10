@@ -410,7 +410,7 @@ pub const BsonElement = struct {
                 return .{ .object_id = try bson_types.BsonObjectId.fromBytes(value_bytes) };
             },
             .decimal128 => {
-                return .{ .decimal128 = bson_types.BsonDecimal128.fromBytes(value_bytes) };
+                return .{ .decimal128 = try bson_types.BsonDecimal128.fromBytes(value_bytes) };
             },
             else => {
                 return error.InvalidElementType;

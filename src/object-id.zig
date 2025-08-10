@@ -1,7 +1,7 @@
 const std = @import("std");
 const time = std.time;
 
-pub const BsonObjectIdError = error{ ValueSizeNot24Bytes, InvalidCharacter };
+pub const BsonObjectIdError = error{ ValueSizeNot24Bytes, BytesLengthNot12, InvalidCharacter };
 pub const JsonParseError = error{UnexpectedToken} || std.json.Scanner.NextError;
 
 var global_counter: u24 = undefined;
@@ -56,6 +56,15 @@ pub const BsonObjectId = struct {
 
     pub fn isEqualTo(self: *const BsonObjectId, b: *const BsonObjectId) bool {
         return self == b or std.mem.eql(u8, &self.value, &b.value);
+    }
+
+    pub fn fromBytes(bytes: []const u8) BsonObjectIdError!BsonObjectId {
+        if (bytes.len != bson_object_id_size) {
+            return BsonObjectIdError.BytesLengthNot12;
+        }
+        var id: BsonObjectId = undefined;
+        @memcpy(&id.value, bytes);
+        return id;
     }
 
     pub fn fromString(hex: []const u8) BsonObjectIdError!BsonObjectId {

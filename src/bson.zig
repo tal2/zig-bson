@@ -13,6 +13,14 @@ pub const BsonDocument = struct {
     len: usize,
     raw_data: []const u8,
 
+    pub fn loadFromBytes(allocator: Allocator, raw_data: []const u8) !*BsonDocument {
+        var document = try allocator.create(BsonDocument);
+        errdefer document.deinit(allocator);
+        document.len = raw_data.len;
+        document.raw_data = try allocator.dupe(u8, raw_data);
+        return document;
+    }
+
     pub fn readDocument(allocator: Allocator, reader: anytype) !*BsonDocument {
         const document_len = try reader.readInt(i32, .little);
         const size = @as(usize, @intCast(document_len));

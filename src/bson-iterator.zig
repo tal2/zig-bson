@@ -304,8 +304,15 @@ pub const BsonElement = struct {
             },
             .int32 => {
                 switch (T) {
-                    i32, i64, f64 => {
-                        return std.mem.bytesToValue(T, value_bytes);
+                    i32 => {
+                        return std.mem.bytesToValue(i32, value_bytes);
+                    },
+                    i64 => {
+                        const num = std.mem.bytesToValue(i32, value_bytes);
+                        return @as(i64, @intCast(num));
+                    },
+                    f64 => {
+                        return std.mem.bytesToValue(f64, value_bytes);
                     },
                     else => {
                         return error.UnexpectedType;
@@ -327,11 +334,14 @@ pub const BsonElement = struct {
                 return value_bytes[0] == 0x1;
             },
             .utc_date_time => {
-                if (T != bson_types.BsonUtcDatetime) {
-                    return error.UnexpectedType;
+                if (T == bson_types.BsonUtcDatetime) {
+                    const date = std.mem.bytesToValue(i64, value_bytes);
+                    return bson_types.BsonUtcDatetime.fromInt64(date);
                 }
-                const date = std.mem.bytesToValue(i64, value_bytes);
-                return bson_types.BsonUtcDatetime.fromInt64(date);
+                if (T == i64) {
+                    return std.mem.bytesToValue(i64, value_bytes);
+                }
+                return error.UnexpectedType;
             },
             .timestamp => {
                 const timestamp_value = std.mem.bytesToValue(i64, value_bytes);
@@ -363,7 +373,7 @@ pub const BsonElement = struct {
             },
             .decimal128 => {
                 if (T != bson_types.BsonDecimal128) return error.UnexpectedType;
-                return bson_types.BsonDecimal128.fromBytes(value_bytes);
+                return try bson_types.BsonDecimal128.fromBytes(value_bytes);
             },
             else => {
                 return error.InvalidElementType;
@@ -398,7 +408,9 @@ pub const BsonElement = struct {
                 return .{ .date = bson_types.BsonUtcDatetime.fromInt64(date) };
             },
             .timestamp => {
-                return .{ .timestamp = std.mem.bytesToValue(i64, value_bytes) };
+                const timestamp_value = std.mem.bytesToValue(i64, value_bytes);
+                const timestamp = bson_types.BsonTimestamp.fromInt64(timestamp_value);
+                return .{ .timestamp = timestamp };
             },
             .binary => {
                 return .{ .binary = value_bytes };
@@ -450,7 +462,7 @@ pub const BsonValue = union(enum) {
     boolean: bool,
     null: void,
     date: bson_types.BsonUtcDatetime,
-    timestamp: i64,
+    timestamp: bson_types.BsonTimestamp,
     binary: []const u8,
     object_id: bson_types.BsonObjectId,
     decimal128: bson_types.BsonDecimal128,

@@ -9,8 +9,8 @@
 
     .dependencies = .{
         .binary_coded_decimal = .{
-            .url = "git+https://github.com/tal2/zig-binary-coded-decimal#34aa5cede9c35823e8cd1b75a3e1fc062bac3723",
-            .hash = "binary_coded_decimal-0.1.0-2F8B36VlAQCCRe15CRYOqfZL7BKCv0hw3F4wlAiKVtPD",
+            .url = "git+https://github.com/tal2/zig-binary-coded-decimal.git#5b1c1b033612949e645e5db1ea4945bab29a63cb",
+            .hash = "binary_coded_decimal-0.1.1-2F8B3yxjAQDyAQ33d37QI6uzDcLgQ_rgyzhG1Vx9Tgtq",
         },
     },
     .paths = .{

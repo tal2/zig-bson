@@ -9,7 +9,7 @@ pub const BsonDocumentIterator = struct {
     document: *const BsonDocument,
     current_element: ?*BsonElement,
 
-    pub fn init(allocator: Allocator, document: *const BsonDocument) !BsonDocumentIterator {
+    pub fn init(allocator: Allocator, document: *const BsonDocument) BsonDocumentIterator {
         return .{
             .allocator = allocator,
             .document = document,

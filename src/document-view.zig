@@ -51,7 +51,7 @@ pub const BsonDocumentView = struct {
         defer arena.deinit();
         const arena_allocator = arena.allocator();
 
-        var it = try BsonDocumentIterator.init(arena_allocator, self.document);
+        var it = BsonDocumentIterator.init(arena_allocator, self.document);
         errdefer it.deinit();
 
         const element = try it.findElement(key);
@@ -67,7 +67,7 @@ pub const BsonDocumentView = struct {
         defer arena.deinit();
         const arena_allocator = arena.allocator();
 
-        var it = try BsonDocumentIterator.init(arena_allocator, self.document);
+        var it = BsonDocumentIterator.init(arena_allocator, self.document);
         errdefer it.deinit();
 
         const element = try it.findElement(key);
@@ -83,7 +83,7 @@ pub const BsonDocumentView = struct {
         defer arena.deinit();
         const arena_allocator = arena.allocator();
 
-        var it = try BsonDocumentIterator.init(arena_allocator, self.document);
+        var it = BsonDocumentIterator.init(arena_allocator, self.document);
         errdefer it.deinit();
 
         const element = try it.findElement(key);

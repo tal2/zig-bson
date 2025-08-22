@@ -23,7 +23,7 @@ pub fn parseBsonToObject(allocator: Allocator, T: type, instance: *T, doc: *cons
     defer arena.deinit();
     const arena_allocator = arena.allocator();
 
-    const view = try BsonDocumentView.loadDocument(arena_allocator, doc);
+    const view = BsonDocumentView.loadDocument(arena_allocator, doc);
 
     inline for (std.meta.fields(T)) |field| {
         const field_name = field.name;

@@ -12,7 +12,8 @@ pub const BsonDocumentView = struct {
     allocator: Allocator,
     document: *const BsonDocument,
 
-    pub fn loadDocument(allocator: Allocator, document: *const BsonDocument) !BsonDocumentView {
+    /// Does not own the document.
+    pub fn loadDocument(allocator: Allocator, document: *const BsonDocument) BsonDocumentView {
         return .{
             .allocator = allocator,
             .document = document,
@@ -22,6 +23,7 @@ pub const BsonDocumentView = struct {
     pub fn get(self: *const BsonDocumentView, key: []const u8) !?BsonValue {
         const element = try self.getElement(key);
         if (element) |e| {
+            defer e.deinit(self.allocator);
             return try e.getValueWithAllocator(self.allocator);
         }
         return null;
@@ -34,9 +36,11 @@ pub const BsonDocumentView = struct {
         }
         return null;
     }
+
     pub fn getAsBsonDocumentElement(self: *const BsonDocumentView, key: []const u8) !?*BsonDocument {
         const element = try self.getElement(key);
         if (element) |e| {
+            defer e.deinit(self.allocator);
             return try e.getAsDocumentElement(self.allocator);
         }
         return null;
@@ -72,5 +76,20 @@ pub const BsonDocumentView = struct {
             return (element_value == value);
         }
         return false;
+    }
+
+    pub fn isNullOrEmpty(self: *const BsonDocumentView, key: []const u8) !bool {
+        var arena = std.heap.ArenaAllocator.init(self.allocator);
+        defer arena.deinit();
+        const arena_allocator = arena.allocator();
+
+        var it = try BsonDocumentIterator.init(arena_allocator, self.document);
+        errdefer it.deinit();
+
+        const element = try it.findElement(key);
+        if (element) |e| {
+            return try e.isNullOrEmpty();
+        }
+        return true;
     }
 };

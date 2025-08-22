@@ -433,6 +433,17 @@ pub const BsonElement = struct {
         }
     }
 
+    pub fn isNullOrEmpty(self: *const BsonElement) !bool {
+        if (self.type == .null) return true;
+        return self.size == 0;
+    }
+
+    pub fn hasValue(self: *const BsonElement, T: type) !bool {
+        _ = T;
+        if (self.type == .null) return false;
+        return self.size > 0;
+    }
+
     pub fn endPos(self: *const BsonElement) usize {
         return self.pos + self.size;
     }

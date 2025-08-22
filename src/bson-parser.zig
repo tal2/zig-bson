@@ -48,7 +48,142 @@ pub fn parseBsonToObject(allocator: Allocator, T: type, instance: *T, doc: *cons
                     @field(instance, field_name) = field_value;
                 },
                 .@"union" => {
-                    return error.UnionTypeNotSupported;
+                    const union_field_fields = std.meta.fields(field_type);
+
+                    switch (bson_element.type) {
+                        .string => {
+                            const zig_type = []const u8;
+                            const field_value = try bson_element.getValueAs(zig_type);
+                            const field_value_copy: []const u8 = try allocator.dupe(u8, field_value);
+                            errdefer allocator.free(field_value_copy);
+
+                            inline for (union_field_fields) |field_| {
+                                if (field_.type == zig_type) {
+                                    @field(instance, field_name) = @unionInit(field_type, field_.name, field_value_copy);
+                                }
+                            }
+                        },
+                        .boolean => {
+                            const field_value = try bson_element.getValueAs(bool);
+
+                            inline for (union_field_fields) |field_| {
+                                if (field_.type == bool) {
+                                    @field(instance, field_name) = @unionInit(field_type, field_.name, field_value);
+                                }
+                            }
+                        },
+                        .int32 => {
+                            var is_set = false;
+                            const field_value = try bson_element.getValueAs(i32);
+                            inline for (union_field_fields) |field_| {
+                                if (field_.type == i32) {
+                                    @field(instance, field_name) = @unionInit(field_type, field_.name, field_value);
+                                    is_set = true;
+                                }
+                            }
+                            if (!is_set) {
+                                const field_value_i64 = try bson_element.getValueAs(i64);
+                                inline for (union_field_fields) |field_| {
+                                    if (field_.type == i64) {
+                                        @field(instance, field_name) = @unionInit(field_type, field_.name, field_value_i64);
+                                        is_set = true;
+                                    }
+                                }
+                            }
+                            if (!is_set) {
+                                const field_value_f64 = try bson_element.getValueAs(f64);
+                                inline for (union_field_fields) |field_| {
+                                    if (field_.type == f64) {
+                                        @field(instance, field_name) = @unionInit(field_type, field_.name, field_value_f64);
+                                        is_set = true;
+                                    }
+                                }
+                            }
+                        },
+                        .int64 => {
+                            var is_set = false;
+                            const field_value = try bson_element.getValueAs(i64);
+                            inline for (union_field_fields) |field_| {
+                                if (field_.type == i64) {
+                                    @field(instance, field_name) = @unionInit(field_type, field_.name, field_value);
+                                    is_set = true;
+                                }
+                            }
+                            if (!is_set) {
+                                const field_value_f64 = try bson_element.getValueAs(f64);
+                                inline for (union_field_fields) |field_| {
+                                    if (field_.type == f64) {
+                                        @field(instance, field_name) = @unionInit(field_type, field_.name, field_value_f64);
+                                        is_set = true;
+                                    }
+                                }
+                            }
+                        },
+                        .double => {
+                            const field_value = try bson_element.getValueAs(f64);
+                            inline for (union_field_fields) |field_| {
+                                if (field_.type == f64) {
+                                    @field(instance, field_name) = @unionInit(field_type, field_.name, field_value);
+                                }
+                            }
+                        },
+                        .decimal128 => {
+                            const field_value = try bson_element.getValueAs(BsonDecimal128);
+
+                            inline for (union_field_fields) |field_| {
+                                if (field_.type == BsonDecimal128) {
+                                    @field(instance, field_name) = @unionInit(field_type, field_.name, field_value);
+                                }
+                            }
+                        },
+                        .object_id => {
+                            const field_value = try bson_element.getValueAs(bson_types.BsonObjectId);
+
+                            inline for (union_field_fields) |field_| {
+                                if (field_.type == bson_types.BsonObjectId) {
+                                    @field(instance, field_name) = @unionInit(field_type, field_.name, field_value);
+                                }
+                            }
+                        },
+                        .timestamp => {
+                            const field_value = try bson_element.getValueAs(bson_types.BsonTimestamp);
+
+                            inline for (union_field_fields) |field_| {
+                                if (field_.type == bson_types.BsonTimestamp) {
+                                    @field(instance, field_name) = @unionInit(field_type, field_.name, field_value);
+                                }
+                            }
+                        },
+                        .utc_date_time => {
+                            const field_value = try bson_element.getValueAs(bson_types.BsonUtcDatetime);
+
+                            inline for (union_field_fields) |field_| {
+                                if (field_.type == bson_types.BsonUtcDatetime) {
+                                    @field(instance, field_name) = @unionInit(field_type, field_.name, field_value);
+                                }
+                            }
+                        },
+                        .binary => {
+                            const field_value = try bson_element.getValueAs(bson_types.BsonBinary);
+
+                            inline for (union_field_fields) |field_| {
+                                if (field_.type == bson_types.BsonBinary) {
+                                    @field(instance, field_name) = @unionInit(field_type, field_.name, field_value);
+                                }
+                            }
+                        },
+                        .null => {
+                            inline for (union_field_fields) |field_| {
+                                if (field_.type == void) {
+                                    @field(instance, field_name) = @unionInit(field_type, field_.name, void{});
+                                }
+                            }
+                        },
+
+                        else => {
+                            return error.UnionFieldTypeNotSupported;
+                        },
+                    }
                 },
 
                 .@"struct" => {
@@ -99,7 +234,7 @@ pub fn parseBsonToObject(allocator: Allocator, T: type, instance: *T, doc: *cons
                             if (field_type_info.pointer.child == u8) {
                                 const field_value = try bson_element.getValueAs(field_type);
 
-                                const field_value_copy = if (field_type_info.pointer.sentinel_ptr == null)
+                                const field_value_copy = if (comptime field_type_info.pointer.sentinel_ptr == null)
                                     try allocator.dupe(u8, field_value)
                                 else
                                     try allocator.dupeZ(u8, field_value);

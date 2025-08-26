@@ -1,6 +1,9 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
+const Reader = std.Io.Reader;
+const Writer = std.Io.Writer;
+
 const bson_writer = @import("bson-writer.zig");
 const ext_json_parser = @import("bson-ext-json-parser.zig");
 const jsonStringToBson = ext_json_parser.jsonStringToBson;
@@ -27,8 +30,8 @@ pub const BsonDocument = struct {
         return document;
     }
 
-    pub fn readDocument(allocator: Allocator, reader: anytype) !*BsonDocument {
-        const document_len = try reader.readInt(i32, .little);
+    pub fn readDocument(allocator: Allocator, reader: *Reader) !*BsonDocument {
+        const document_len = try reader.takeInt(i32, .little);
         const size = @as(usize, @intCast(document_len));
 
         var raw_data = try allocator.alloc(u8, size);
@@ -39,7 +42,7 @@ pub const BsonDocument = struct {
         var pos: usize = @sizeOf(i32);
 
         while (pos < size) {
-            const amt = try reader.read(raw_data[pos..]);
+            const amt = try reader.readSliceShort(raw_data[pos..]);
             if (amt == 0) {
                 return error.EndOfStream;
             }
@@ -68,8 +71,8 @@ pub const BsonDocument = struct {
         return try jsonStringToBson(allocator, json_string);
     }
 
-    pub fn fromJsonReader(allocator: Allocator, reader: anytype, comptime is_source_single_object: bool) !*BsonDocument {
-        return try ext_json_parser.jsonReaderToBson(allocator, reader, is_source_single_object);
+    pub fn fromJsonReader(allocator: Allocator, reader: *std.Io.Reader) !*BsonDocument {
+        return try ext_json_parser.jsonReaderToBson(allocator, reader, false);
     }
 
     pub fn fromObject(allocator: Allocator, comptime T: type, obj: T) !*BsonDocument {
@@ -82,6 +85,8 @@ pub const BsonDocument = struct {
 
     pub fn toObject(doc: *const BsonDocument, allocator: Allocator, comptime T: type, options: bson_parser.ParseBsonToObjectOptions) !*T {
         const instance = try allocator.create(T);
+        errdefer allocator.destroy(instance);
+
         try bson_parser.parseBsonToObject(allocator, T, instance, doc, options);
         return instance;
     }

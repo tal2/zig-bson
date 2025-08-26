@@ -9,6 +9,8 @@ const bson_types = @import("bson-types.zig");
 const Allocator = std.mem.Allocator;
 const BsonDocument = bson.BsonDocument;
 const assert = std.debug.assert;
+const Writer = std.io.Writer;
+const Reader = std.io.Reader;
 
 const native_endian = builtin.cpu.arch.endian();
 
@@ -24,14 +26,15 @@ pub const NullIgnoredFieldNames = union(enum) {
     named_optional_fields: []const []const u8,
 };
 
-pub const BsonAppendError = std.fmt.BufPrintError || Allocator.Error || error{InvalidObjectId};
+pub const BsonAppendError = std.fmt.BufPrintError || Allocator.Error || Writer.Error || error{InvalidObjectId};
+
 
 pub fn writeToBson(comptime T: type, obj: T, allocator: Allocator) BsonAppendError!*BsonDocument {
-    var data_writer = std.ArrayList(u8).init(allocator);
-    defer data_writer.deinit();
+    var data_writer: std.io.Writer.Allocating = try .initCapacity(allocator, 1024); // TODO: capacity
+    errdefer data_writer.deinit();
 
-    try appendDocumentToBson(T, obj, &data_writer);
-
+    const writer = &data_writer.writer;
+    try appendDocumentToBson(T, obj, writer);
     const bson_doc = try allocator.create(BsonDocument);
 
     bson_doc.raw_data = try data_writer.toOwnedSlice();
@@ -39,11 +42,11 @@ pub fn writeToBson(comptime T: type, obj: T, allocator: Allocator) BsonAppendErr
     return bson_doc;
 }
 
-pub fn appendDocumentToBson(comptime T: type, obj: T, data_writer: *std.ArrayList(u8)) BsonAppendError!void {
+pub fn appendDocumentToBson(comptime T: type, obj: T, data_writer: *Writer) BsonAppendError!void {
     try writeToBsonWriter(T, obj, data_writer);
 }
 
-pub fn writeToBsonWriter(comptime T: type, obj: T, writer: *std.ArrayList(u8)) !void {
+pub fn writeToBsonWriter(comptime T: type, obj: T, writer: *Writer) !void {
     const type_info = @typeInfo(T);
 
     switch (type_info) {
@@ -68,11 +71,11 @@ pub fn writeToBsonWriter(comptime T: type, obj: T, writer: *std.ArrayList(u8)) !
     }
 
     if (T == bson.BsonDocument) {
-        try writer.appendSlice(obj.raw_data);
+        try writer.writeAll(obj.raw_data);
         return;
     }
 
-    const start_pos = writer.items.len;
+    const start_pos = writer.end;
 
     try appendDocumentLenPlaceholder(writer);
 
@@ -134,28 +137,28 @@ pub fn writeToBsonWriter(comptime T: type, obj: T, writer: *std.ArrayList(u8)) !
         }
     }
     try appendNullTerminator(writer);
-    const document_len = writer.items.len - start_pos;
-    updateLenMarker(writer.items, start_pos, document_len);
+    const document_len = writer.end - start_pos;
+    updateLenMarker(writer.buffer, start_pos, document_len);
 }
 
-pub inline fn appendElementType(writer: *std.ArrayList(u8), element_type: ElementType) std.mem.Allocator.Error!void {
+pub inline fn appendElementType(writer: *Writer, element_type: ElementType) Writer.Error!void {
     const value: i8 = @intFromEnum(element_type);
 
     const value_byte: u8 = @bitCast(if (native_endian == .little) value else @byteSwap(value)); // TODO: verify
-    try writer.append(value_byte);
+    try writer.writeByte(value_byte);
 }
 
-pub inline fn appendElementValue(writer: *std.ArrayList(u8), field_element_type: ElementType, FieldType: type, field_value: anytype) BsonAppendError!void {
+pub inline fn appendElementValue(writer: *Writer, field_element_type: ElementType, FieldType: type, field_value: anytype) BsonAppendError!void {
     switch (field_element_type) {
         .int32 => {
-            if (@TypeOf(field_value) == usize) {
+            if (@TypeOf(field_value) == usize or @TypeOf(field_value) == u32) {
                 try appendInt32(writer, @as(i32, @intCast(field_value)));
             } else {
                 try appendInt32(writer, field_value);
             }
         },
         .int64 => {
-            if (@TypeOf(field_value) == usize) {
+            if (@TypeOf(field_value) == usize or @TypeOf(field_value) == u64) {
                 try appendInt64(writer, @as(i64, @intCast(field_value)));
             } else {
                 try appendInt64(writer, field_value);
@@ -178,7 +181,7 @@ pub inline fn appendElementValue(writer: *std.ArrayList(u8), field_element_type:
             try appendDocumentToBson(FieldType, field_value, writer);
         },
         .array => {
-            const start_pos = writer.items.len;
+            const start_pos = writer.end;
             try appendDocumentLenPlaceholder(writer);
             for (field_value, 0..) |item, item_index| {
                 const array_item_type = comptime ElementType.typeToElementType(@TypeOf(item));
@@ -188,9 +191,9 @@ pub inline fn appendElementValue(writer: *std.ArrayList(u8), field_element_type:
                 try appendElementValue(writer, array_item_type, @TypeOf(item), item);
             }
             try appendNullTerminator(writer);
-            const end_pos = writer.items.len;
+            const end_pos = writer.end;
             const len = end_pos - start_pos;
-            updateLenMarker(writer.items, start_pos, len);
+            updateLenMarker(writer.buffer, start_pos, len);
         },
         .timestamp => {
             try appendUint64(writer, field_value.value);
@@ -205,7 +208,7 @@ pub inline fn appendElementValue(writer: *std.ArrayList(u8), field_element_type:
             try appendByte(writer, @as(u8, if (field_value) 1 else 0));
         },
         .object_id => {
-            try writer.appendSlice(&field_value.value);
+            try writer.writeAll(&field_value.value);
         },
         else => {
             @panic("Unsupported type: " ++ @typeName(FieldType));
@@ -213,51 +216,51 @@ pub inline fn appendElementValue(writer: *std.ArrayList(u8), field_element_type:
     }
 }
 
-pub inline fn appendNullTerminator(writer: *std.ArrayList(u8)) std.mem.Allocator.Error!void {
-    try writer.append(@as(u8, 0));
+pub inline fn appendNullTerminator(writer: *Writer) Writer.Error!void {
+    try writer.writeByte(0);
 }
 
-pub inline fn appendByte(writer: *std.ArrayList(u8), value: u8) std.mem.Allocator.Error!void {
+pub inline fn appendByte(writer: *Writer, value: u8) Writer.Error!void {
     var value_bytes = std.mem.toBytes(value);
     value_bytes = @bitCast(if (native_endian == .little) value_bytes else @byteSwap(value_bytes));
 
-    try writer.appendSlice(&value_bytes);
+    try writer.writeAll(&value_bytes);
 }
 
-pub inline fn appendInt32(writer: *std.ArrayList(u8), value: i32) std.mem.Allocator.Error!void {
+pub inline fn appendInt32(writer: *Writer, value: i32) Writer.Error!void {
     try appendNumber(writer, value);
 }
 
-pub inline fn appendInt64(writer: *std.ArrayList(u8), value: i64) std.mem.Allocator.Error!void {
+pub inline fn appendInt64(writer: *Writer, value: i64) Writer.Error!void {
     try appendNumber(writer, value);
 }
 
-pub inline fn appendUint64(writer: *std.ArrayList(u8), value: u64) std.mem.Allocator.Error!void {
+pub inline fn appendUint64(writer: *Writer, value: u64) Writer.Error!void {
     try appendNumber(writer, value);
 }
 
-pub inline fn appendDouble(writer: *std.ArrayList(u8), value: f64) std.mem.Allocator.Error!void {
+pub inline fn appendDouble(writer: *Writer, value: f64) Writer.Error!void {
     try appendNumber(writer, value);
 }
 
-inline fn appendNumber(writer: *std.ArrayList(u8), value: anytype) std.mem.Allocator.Error!void {
+inline fn appendNumber(writer: *Writer, value: anytype) Writer.Error!void {
     comptime utils.assertIsNumber(@TypeOf(value));
     var value_bytes = std.mem.toBytes(value);
     value_bytes = @bitCast(if (native_endian == .little) value_bytes else @byteSwap(value_bytes));
 
-    try writer.appendSlice(&value_bytes);
+    _ = try writer.write(&value_bytes);
 }
 
-pub inline fn appendObjectId(writer: *std.ArrayList(u8), value: []const u8) BsonAppendError!void {
+pub inline fn appendObjectId(writer: *Writer, value: []const u8) BsonAppendError!void {
     if (value.len != BsonObjectId.bson_object_id_as_string_size) {
         return BsonAppendError.InvalidObjectId;
     }
     var buffer: [BsonObjectId.bson_object_id_size]u8 = undefined;
     const value_bytes = std.fmt.hexToBytes(&buffer, value) catch return BsonAppendError.InvalidObjectId;
-    try writer.appendSlice(value_bytes);
+    try writer.writeAll(value_bytes);
 }
 
-pub inline fn appendNumberFromString(writer: *std.ArrayList(u8), value: []const u8) (std.mem.Allocator.Error || std.fmt.ParseFloatError)!ElementType {
+pub inline fn appendNumberFromString(writer: *Writer, value: []const u8) (Writer.Error || std.fmt.ParseFloatError)!ElementType {
     const i32_bytes_len: usize = (if (value[0] == '-') 11 else 10);
     if (value.len <= i32_bytes_len) {
         const num = std.fmt.parseInt(i32, value, 10) catch {
@@ -280,11 +283,11 @@ pub inline fn appendNumberFromString(writer: *std.ArrayList(u8), value: []const 
     unreachable;
 }
 
-pub inline fn appendDecimal128(writer: *std.ArrayList(u8), value: *BsonDecimal128) std.mem.Allocator.Error!void {
+pub inline fn appendDecimal128(writer: *Writer, value: *BsonDecimal128) Writer.Error!void {
     try value.writeAsBytes(writer);
 }
 
-pub fn appendIntAsString(comptime T: type, writer: *std.ArrayList(u8), value: T, comptime add_len_prefix: bool, comptime add_null_terminator: bool) std.mem.Allocator.Error!void {
+pub fn appendIntAsString(comptime T: type, writer: *Writer, value: T, comptime add_len_prefix: bool, comptime add_null_terminator: bool) Writer.Error!void {
     comptime utils.assertIsInt(T);
     const max_len = @sizeOf(T) * 2;
     var buf: [max_len]u8 = undefined;
@@ -292,40 +295,61 @@ pub fn appendIntAsString(comptime T: type, writer: *std.ArrayList(u8), value: T,
     return try appendString(writer, value_as_string, add_len_prefix, add_null_terminator);
 }
 
-pub fn appendString(writer: *std.ArrayList(u8), value: []const u8, comptime add_len_prefix: bool, comptime add_null_terminator: bool) std.mem.Allocator.Error!void {
+pub fn appendString(writer: *Writer, value: []const u8, comptime add_len_prefix: bool, comptime add_null_terminator: bool) Writer.Error!void {
     if (add_len_prefix) {
         const value_len_as_int32 = @as(i32, @intCast(value.len + if (add_null_terminator) 1 else 0));
         try appendInt32(writer, value_len_as_int32);
     }
 
     if (value.len > 0) {
-        try writer.appendSlice(value);
+        try writer.writeAll(value);
     }
     if (add_null_terminator) {
         try appendNullTerminator(writer);
     }
 }
 
-pub fn appendBinary(writer: *std.ArrayList(u8), sub_type: BsonSubType, value: []const u8) std.mem.Allocator.Error!void {
+pub fn appendBinary(writer: *Writer, sub_type: BsonSubType, value: []const u8) Writer.Error!void {
     const value_len_as_int32 = @as(i32, @intCast(value.len));
     const sub_type_value: u8 = @intFromEnum(sub_type);
 
     if (sub_type == .binary_old) { // see spec notes: https://bsonspec.org/spec.html
         @branchHint(.unlikely);
         try appendInt32(writer, value_len_as_int32 + @sizeOf(i32));
-        try writer.append(sub_type_value);
+        try writer.writeByte(sub_type_value);
         try appendInt32(writer, value_len_as_int32);
-        try writer.appendSlice(value);
+        try writer.writeAll(value);
 
         return;
     }
 
     try appendInt32(writer, value_len_as_int32);
-    try writer.append(sub_type_value);
-    try writer.appendSlice(value);
+    try writer.writeByte(sub_type_value);
+    try writer.writeAll(value);
 }
 
-pub inline fn appendDocumentLenPlaceholder(writer: *std.ArrayList(u8)) std.mem.Allocator.Error!void {
+pub fn appendBinaryDecodedBase64(writer: *Writer, sub_type: BsonSubType, encoded_value: []const u8) (Writer.Error || std.base64.Error)!void {
+    const expected_size = try std.base64.standard.Decoder.calcSizeForSlice(encoded_value);
+    const value_len_as_int32 = @as(i32, @intCast(expected_size));
+    const sub_type_value: u8 = @intFromEnum(sub_type);
+
+    if (sub_type == .binary_old) { // see spec notes: https://bsonspec.org/spec.html
+        @branchHint(.unlikely);
+        try appendInt32(writer, value_len_as_int32 + @sizeOf(i32));
+        try writer.writeByte(sub_type_value);
+        try appendInt32(writer, value_len_as_int32);
+        const expected_data = try writer.writableSlice(expected_size);
+        try std.base64.standard.Decoder.decode(expected_data, encoded_value);
+        return;
+    }
+
+    try appendInt32(writer, value_len_as_int32);
+    try writer.writeByte(sub_type_value);
+    const expected_data = try writer.writableSlice(expected_size);
+    try std.base64.standard.Decoder.decode(expected_data, encoded_value);
+}
+
+pub inline fn appendDocumentLenPlaceholder(writer: *Writer) Writer.Error!void {
     try appendInt32(writer, 0);
 }
 

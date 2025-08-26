@@ -7,6 +7,10 @@ const Decimal128 = @import("binary_coded_decimal");
 const bson_types = @import("bson-types.zig");
 const BsonWriter = @import("bson-writer.zig");
 
+const Writer = std.Io.Writer;
+const Reader = std.Io.Reader;
+const JsonReader = std.json.Reader;
+
 const Allocator = std.mem.Allocator;
 const BsonDocument = bson.BsonDocument;
 const assert = std.debug.assert;
@@ -33,6 +37,7 @@ const appendDecimal128 = BsonWriter.appendDecimal128;
 const appendObjectId = BsonWriter.appendObjectId;
 const appendString = BsonWriter.appendString;
 const appendBinary = BsonWriter.appendBinary;
+const appendBinaryDecodedBase64 = BsonWriter.appendBinaryDecodedBase64;
 const appendNullTerminator = BsonWriter.appendNullTerminator;
 const updateLenMarker = BsonWriter.updateLenMarker;
 const appendIntAsString = BsonWriter.appendIntAsString;
@@ -45,25 +50,22 @@ const appendDocumentLenPlaceholder = BsonWriter.appendDocumentLenPlaceholder;
 const overwriteDocumentLenPlaceholder = BsonWriter.overwriteDocumentLenPlaceholder;
 
 pub fn jsonStringToBson(allocator: Allocator, json_string: []const u8) !*BsonDocument {
-    const FixedBufferStreamJsonReader = std.io.FixedBufferStream([]const u8).Reader;
-    const JsonReader = std.json.Reader(0x1000, FixedBufferStreamJsonReader); // TODO: configure buffer size
-
-    var stream = std.io.fixedBufferStream(json_string);
-    const stream_reader = stream.reader();
-    var reader = JsonReader.init(allocator, stream_reader);
+    var stream_reader = Reader.fixed(json_string);
+    var reader = JsonReader.init(allocator, &stream_reader);
     defer reader.deinit();
 
     return try jsonReaderToBson(allocator, &reader, true);
 }
 
-pub fn jsonReaderToBson(allocator: Allocator, reader: anytype, comptime is_source_single_object: bool) !*BsonDocument {
-    var data_writer = std.ArrayList(u8).init(allocator);
-    defer data_writer.deinit();
+pub fn jsonReaderToBson(allocator: Allocator, reader: *JsonReader, comptime is_source_single_object: bool) !*BsonDocument {
+    var data_writer = try Writer.Allocating.initCapacity(allocator, 1024);
+    errdefer data_writer.deinit();
 
-    var stack = std.ArrayList(usize).init(allocator);
-    defer stack.deinit();
+    var stack = try std.ArrayList(usize).initCapacity(allocator, 64);
+    defer stack.deinit(allocator);
 
-    try parseJsonToBson(&data_writer, reader, &stack, null, is_source_single_object);
+    const writer = &data_writer.writer;
+    try parseJsonToBson(writer, reader, &stack, null, is_source_single_object);
 
     const bson_data = try allocator.create(BsonDocument);
     const raw_data = try data_writer.toOwnedSlice();
@@ -73,14 +75,14 @@ pub fn jsonReaderToBson(allocator: Allocator, reader: anytype, comptime is_sourc
     return bson_data;
 }
 
-pub fn parseJsonToBson(data_writer: *std.ArrayList(u8), data_reader: anytype, stack: *std.ArrayList(usize), last_element_type_pos: ?usize, comptime is_source_single_object: bool) !void {
+pub fn parseJsonToBson(data_writer: *Writer, data_reader: *JsonReader, stack: *std.ArrayList(usize), last_element_type_pos: ?usize, comptime is_source_single_object: bool) !void {
     // TODO: verify reader is valid JsonReader
 
     var current_token: std.json.Token = try data_reader.next();
     loop: while (true) : (current_token = try data_reader.next()) {
         switch (current_token) {
             .object_begin => {
-                try stack.append(data_writer.items.len);
+                stack.appendAssumeCapacity(data_writer.end);
                 try appendDocumentLenPlaceholder(data_writer);
 
                 continue :loop;
@@ -88,9 +90,9 @@ pub fn parseJsonToBson(data_writer: *std.ArrayList(u8), data_reader: anytype, st
             .object_end => {
                 try appendNullTerminator(data_writer);
                 const start_pos = stack.pop() orelse @panic("stack is empty");
-                const end_pos = data_writer.items.len;
+                const end_pos = data_writer.end;
                 const len = end_pos - start_pos;
-                updateLenMarker(data_writer.items, start_pos, len);
+                updateLenMarker(data_writer.buffer, start_pos, len);
 
                 if (!is_source_single_object) return;
             },
@@ -100,7 +102,7 @@ pub fn parseJsonToBson(data_writer: *std.ArrayList(u8), data_reader: anytype, st
             },
             .end_of_document => {
                 assert(stack.items.len == 0);
-                overwriteDocumentLenPlaceholder(data_writer.items);
+                overwriteDocumentLenPlaceholder(data_writer.buffered());
 
                 break :loop;
             },
@@ -111,7 +113,7 @@ pub fn parseJsonToBson(data_writer: *std.ArrayList(u8), data_reader: anytype, st
 
                 const element = try data_reader.next();
 
-                const current_element_type_pos = data_writer.items.len;
+                const current_element_type_pos = data_writer.end;
                 try appendElementType(data_writer, try ElementType.fromToken(element));
                 try appendString(data_writer, e_name, false, true);
 
@@ -125,10 +127,10 @@ pub fn parseJsonToBson(data_writer: *std.ArrayList(u8), data_reader: anytype, st
     }
 }
 
-fn parseJsonValueToBson(data_writer: *std.ArrayList(u8), reader: anytype, stack: *std.ArrayList(usize), element: std.json.Token, last_element_type_pos: ?usize) anyerror!void {
+fn parseJsonValueToBson(data_writer: *Writer, reader: *JsonReader, stack: *std.ArrayList(usize), element: std.json.Token, last_element_type_pos: ?usize) anyerror!void {
     switch (element) {
         .object_begin => {
-            try stack.append(data_writer.items.len);
+            stack.appendAssumeCapacity(data_writer.end);
             try appendDocumentLenPlaceholder(data_writer);
 
             try parseJsonToBson(data_writer, reader, stack, last_element_type_pos, false);
@@ -168,8 +170,8 @@ fn parseJsonValueToBson(data_writer: *std.ArrayList(u8), reader: anytype, stack:
     }
 }
 
-fn parseArrayToBson(data_writer: *std.ArrayList(u8), reader: anytype, stack: *std.ArrayList(usize)) anyerror!void {
-    const array_start_pos = data_writer.items.len;
+fn parseArrayToBson(data_writer: *Writer, reader: *JsonReader, stack: *std.ArrayList(usize)) anyerror!void {
+    const array_start_pos = data_writer.end;
     try appendDocumentLenPlaceholder(data_writer);
 
     var array_item_index: i32 = 0;
@@ -184,11 +186,11 @@ fn parseArrayToBson(data_writer: *std.ArrayList(u8), reader: anytype, stack: *st
     }
 
     try appendNullTerminator(data_writer);
-    const len = data_writer.items.len - array_start_pos;
-    updateLenMarker(data_writer.items, array_start_pos, len);
+    const len = data_writer.end - array_start_pos;
+    updateLenMarker(data_writer.buffer, array_start_pos, len);
 }
 
-fn parseArrayItemToBson(data_writer: *std.ArrayList(u8), reader: anytype, stack: *std.ArrayList(usize), array_item_index: i32, element: std.json.Token) !bool {
+fn parseArrayItemToBson(data_writer: *Writer, reader: *JsonReader, stack: *std.ArrayList(usize), array_item_index: i32, element: std.json.Token) !bool {
     if (element == .array_end) {
         return false;
     }
@@ -196,7 +198,7 @@ fn parseArrayItemToBson(data_writer: *std.ArrayList(u8), reader: anytype, stack:
         @panic("not tested");
     }
 
-    const last_element_type_pos = data_writer.items.len;
+    const last_element_type_pos = data_writer.end;
 
     const element_type = try ElementType.fromToken(element);
     try appendElementType(data_writer, element_type);
@@ -207,50 +209,50 @@ fn parseArrayItemToBson(data_writer: *std.ArrayList(u8), reader: anytype, stack:
     return true;
 }
 
-fn appendPartialString(data_writer: *std.ArrayList(u8), reader: anytype, starting_token: std.json.Token, comptime add_len_prefix: bool) !void {
+fn appendPartialString(writer: *Writer, reader: *JsonReader, starting_token: std.json.Token, comptime add_len_prefix: bool) !void {
     if (starting_token == .string) {
-        try appendString(data_writer, starting_token.string, add_len_prefix, true);
+        try appendString(writer, starting_token.string, add_len_prefix, true);
         return;
     }
-    const current_pos = data_writer.items.len;
+    const current_pos = writer.end;
     if (add_len_prefix) {
-        try appendDocumentLenPlaceholder(data_writer);
+        try appendDocumentLenPlaceholder(writer);
     }
 
     var next_token = starting_token;
     while (true) : (next_token = try reader.next()) {
         switch (next_token) {
             .string => |value| {
-                try data_writer.appendSlice(value);
-                try appendNullTerminator(data_writer);
+                try writer.writeAll(value);
+                try appendNullTerminator(writer);
                 break;
             },
             .partial_number, .partial_string => |slice| {
-                try data_writer.appendSlice(slice);
+                try writer.writeAll(slice);
             },
             .partial_string_escaped_1 => |buf| {
-                try data_writer.appendSlice(buf[0..]);
+                try writer.writeAll(buf[0..]);
             },
             .partial_string_escaped_2 => |buf| {
-                try data_writer.appendSlice(buf[0..]);
+                try writer.writeAll(buf[0..]);
             },
             .partial_string_escaped_3 => |buf| {
-                try data_writer.appendSlice(buf[0..]);
+                try writer.writeAll(buf[0..]);
             },
             .partial_string_escaped_4 => |buf| {
-                try data_writer.appendSlice(buf[0..]);
+                try writer.writeAll(buf[0..]);
             },
             else => @panic("unexpected token"),
         }
     }
 
     if (add_len_prefix) {
-        const len = data_writer.items.len - @sizeOf(i32) - current_pos;
-        updateLenMarker(data_writer.items, current_pos, len);
+        const len = writer.end - @sizeOf(i32) - current_pos;
+        updateLenMarker(writer.buffer, current_pos, len);
     }
 }
 
-fn appendJsonExtValueToBson(e_name: []const u8, data_writer: *std.ArrayList(u8), reader: anytype, stack: *std.ArrayList(usize), last_element_type_pos: ?usize) !bool {
+fn appendJsonExtValueToBson(e_name: []const u8, data_writer: *Writer, reader: *JsonReader, stack: *std.ArrayList(usize), last_element_type_pos: ?usize) !bool {
     const element_type_optional = ElementType.fromExtJsonKey(e_name);
     if (element_type_optional == null) {
         return false;
@@ -284,12 +286,12 @@ fn appendJsonExtValueToBson(e_name: []const u8, data_writer: *std.ArrayList(u8),
                 @as(u64, @intCast(i_value)) << 32 | @as(u64, @intCast(t_value));
 
         const start_pos = stack.pop() orelse @panic("stack is empty");
-        data_writer.shrinkRetainingCapacity(start_pos);
+        data_writer.end = start_pos;
 
         try appendUint64(data_writer, timestamp_value);
 
         if (last_element_type_pos) |last_element_type_pos_value| {
-            overwriteElementType(data_writer.items, last_element_type_pos_value, element_type);
+            overwriteElementType(data_writer.buffer, last_element_type_pos_value, element_type);
         } else {
             @panic("last_element_type_pos is null");
         }
@@ -307,11 +309,12 @@ fn appendJsonExtValueToBson(e_name: []const u8, data_writer: *std.ArrayList(u8),
         if (regexp_token_pattern != .string or !std.mem.eql(u8, regexp_token_pattern.string, "pattern")) return JsonParseError.UnexpectedToken;
 
         const regexp_token_pattern_value = try reader.next();
-        var temp_data_writer = std.ArrayList(u8).init(data_writer.allocator);
-        defer temp_data_writer.deinit();
 
-        try appendPartialString(&temp_data_writer, reader, regexp_token_pattern_value, false);
-        const regexp_pattern_value = try temp_data_writer.toOwnedSlice();
+        const start_pos_regexp_element = stack.pop() orelse @panic("stack is empty");
+        data_writer.end = start_pos_regexp_element;
+
+        try appendPartialString(data_writer, reader, regexp_token_pattern_value, false);
+        const regexp_pattern_value = data_writer.buffer[start_pos_regexp_element..data_writer.end];
         try verifyValidRegExpValue(regexp_pattern_value);
 
         const regexp_token_options = try reader.next();
@@ -319,8 +322,9 @@ fn appendJsonExtValueToBson(e_name: []const u8, data_writer: *std.ArrayList(u8),
 
         const regexp_token_options_value = try reader.next();
 
-        try appendPartialString(&temp_data_writer, reader, regexp_token_options_value, false);
-        const regexp_options_value = try temp_data_writer.toOwnedSlice();
+        const start_pos_regexp_options_element = data_writer.end;
+        try appendPartialString(data_writer, reader, regexp_token_options_value, false);
+        const regexp_options_value = data_writer.buffer[start_pos_regexp_options_element..data_writer.end];
         if (!BsonRegexpOptions.isValidOptions(regexp_options_value)) {
             return JsonParsingRegExpError.InvalidRegExpOptions;
         }
@@ -331,14 +335,8 @@ fn appendJsonExtValueToBson(e_name: []const u8, data_writer: *std.ArrayList(u8),
         const regexp_token_end = try reader.next();
         if (regexp_token_end != .object_end) return JsonParseError.UnexpectedToken;
 
-        const start_pos_regexp_element = stack.pop() orelse @panic("stack is empty");
-        data_writer.shrinkRetainingCapacity(start_pos_regexp_element);
-
-        try appendString(data_writer, regexp_pattern_value, false, false);
-        try appendString(data_writer, regexp_options_value, false, false);
-
         if (last_element_type_pos) |last_element_type_pos_value| {
-            BsonWriter.overwriteElementType(data_writer.items, last_element_type_pos_value, element_type);
+            BsonWriter.overwriteElementType(data_writer.buffer, last_element_type_pos_value, element_type);
         } else {
             @panic("last_element_type_pos is null");
         }
@@ -373,15 +371,12 @@ fn appendJsonExtValueToBson(e_name: []const u8, data_writer: *std.ArrayList(u8),
         const sub_type: BsonSubType = @enumFromInt(try std.fmt.parseInt(u8, binary_token_sub_type_value.string, 16));
 
         const start_pos_binary_element = stack.pop() orelse @panic("stack is empty");
-        data_writer.shrinkRetainingCapacity(start_pos_binary_element);
+        data_writer.end = start_pos_binary_element;
 
-        const binary_token_base64_value_decoded = try utils.bytesFromBase64(data_writer.allocator, binary_token_base64_value);
-        defer data_writer.allocator.free(binary_token_base64_value_decoded);
-
-        try appendBinary(data_writer, sub_type, binary_token_base64_value_decoded);
+        try appendBinaryDecodedBase64(data_writer, sub_type, binary_token_base64_value);
 
         if (last_element_type_pos) |last_element_type_pos_value| {
-            BsonWriter.overwriteElementType(data_writer.items, last_element_type_pos_value, element_type);
+            BsonWriter.overwriteElementType(data_writer.buffer, last_element_type_pos_value, element_type);
         } else {
             @panic("last_element_type_pos is null");
         }
@@ -400,7 +395,7 @@ fn appendJsonExtValueToBson(e_name: []const u8, data_writer: *std.ArrayList(u8),
         if (!result) return JsonParseError.UnexpectedToken;
     } else {
         const start_pos = stack.pop() orelse @panic("stack is empty");
-        data_writer.shrinkRetainingCapacity(start_pos);
+        data_writer.end = start_pos;
 
         switch (element_type) {
             .int32 => {
@@ -460,7 +455,7 @@ fn appendJsonExtValueToBson(e_name: []const u8, data_writer: *std.ArrayList(u8),
     }
 
     if (last_element_type_pos) |last_element_type_pos_value| {
-        BsonWriter.overwriteElementType(data_writer.items, last_element_type_pos_value, element_type);
+        BsonWriter.overwriteElementType(data_writer.buffer, last_element_type_pos_value, element_type);
     } else {
         return JsonParseError.InvalidNumber; // TODO: use better error
     }

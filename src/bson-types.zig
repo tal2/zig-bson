@@ -270,7 +270,7 @@ pub const BsonBinary = struct {
     value: []const u8,
     sub_type: BsonSubType,
 
-    pub fn fromBytes(comptime T: type, value: []const T, sub_type: BsonSubType) BsonBinary {
+    pub fn fromBytes(value: []const u8, sub_type: BsonSubType) BsonBinary {
         return BsonBinary{
             .value = value,
             .sub_type = sub_type,

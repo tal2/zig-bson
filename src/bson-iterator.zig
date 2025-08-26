@@ -43,13 +43,14 @@ pub const BsonDocumentIterator = struct {
             start_pos += @sizeOf(i32);
             try fbs.seekBy(@sizeOf(i32));
         }
+
         const element_type_raw = try reader.readByte();
         const element_type: bson_types.BsonElementType = @enumFromInt(element_type_raw);
         start_pos += @sizeOf(u8);
 
         var e_name_array_list = try std.ArrayList(u8).initCapacity(self.allocator, 16);
-        defer e_name_array_list.deinit();
-        const e_name_writer = e_name_array_list.writer();
+        defer e_name_array_list.deinit(self.allocator);
+        const e_name_writer = e_name_array_list.writer(self.allocator);
 
         try reader.streamUntilDelimiter(e_name_writer, 0x0, self.document.len - start_pos - 1);
 
@@ -85,7 +86,7 @@ pub const BsonDocumentIterator = struct {
         errdefer self.allocator.destroy(current_element);
 
         current_element.* = BsonElement{
-            .name = try e_name_array_list.toOwnedSlice(),
+            .name = try e_name_array_list.toOwnedSlice(self.allocator),
             .pos = start_pos,
             .size = @as(usize, @intCast(doc_size)),
             .type = element_type,
@@ -101,11 +102,12 @@ pub const BsonDocumentIterator = struct {
         var fbs = std.io.fixedBufferStream(self.document.raw_data);
         var reader = fbs.reader();
 
-        const parent_document_size = @as(usize, @intCast(try reader.readInt(i32, .little)));
+        const size = try reader.readInt(i32, .little);
+        const parent_document_size = @as(usize, @intCast(size));
 
         var e_name_array_list = try std.ArrayList(u8).initCapacity(self.allocator, 16);
-        defer e_name_array_list.deinit();
-        const e_name_writer = e_name_array_list.writer();
+        defer e_name_array_list.deinit(self.allocator);
+        const e_name_writer = e_name_array_list.writer(self.allocator);
 
         while (reader.context.pos < parent_document_size - 1) {
             const element_type_raw = try reader.readByte();
@@ -140,7 +142,7 @@ pub const BsonDocumentIterator = struct {
                 errdefer self.allocator.destroy(current_element);
 
                 current_element.* = BsonElement{
-                    .name = try e_name_array_list.toOwnedSlice(),
+                    .name = try e_name_array_list.toOwnedSlice(self.allocator),
                     .pos = pos,
                     .size = @as(usize, @intCast(doc_size)),
                     .type = element_type,
@@ -199,8 +201,8 @@ pub const BsonElement = struct {
         return try BsonValArray.fromBytes(self.getValueBytes());
     }
     pub fn getValueAsArrayOf(self: *const BsonElement, allocator: Allocator, T: type) ![]T {
-        var array_list = std.ArrayList(T).init(allocator);
-        defer array_list.deinit();
+        var array_list: std.ArrayList(T) = .empty;
+        defer array_list.deinit(allocator);
 
         var array = try BsonValArray.fromBytes(allocator, self.getValueBytes());
         if (comptime @typeInfo(T) == .@"struct" or (@typeInfo(T) == .pointer and @typeInfo(@typeInfo(T).pointer.child) == .@"struct")) {
@@ -208,18 +210,18 @@ pub const BsonElement = struct {
                 if (item.name) |name| allocator.free(name);
 
                 const value = try item.getValueAsWithAllocator(allocator, T);
-                try array_list.append(value);
+                try array_list.append(allocator, value);
             }
         } else {
             while (try array.next()) |item| {
                 if (item.name) |name| allocator.free(name);
 
                 const value = try item.getValueAs(T);
-                try array_list.append(value);
+                try array_list.append(allocator, value);
             }
         }
 
-        return array_list.toOwnedSlice();
+        return array_list.toOwnedSlice(allocator);
     }
 
     pub fn getValueWithAllocator(self: *const BsonElement, allocator: Allocator) !BsonValue {
@@ -471,8 +473,8 @@ pub const BsonValue = union(enum) {
     int64: i64,
     double: f64,
     string: []const u8,
-    document: *BsonDocument,
-    array: BsonValArray,
+    document: *BsonDocument, // TODO: make this a pointer to a BsonDocumentMap
+    array: BsonValArray, // TODO: make this a pointer to a BsonDocumentMap
     boolean: bool,
     null: void,
     date: bson_types.BsonUtcDatetime,

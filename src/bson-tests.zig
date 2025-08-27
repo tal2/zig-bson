@@ -12,12 +12,10 @@ const ExtJsonParser = @import("bson-ext-json-parser.zig");
 
 const testing = std.testing;
 const Allocator = std.mem.Allocator;
-const native_endian = builtin.cpu.arch.endian();
 const debug = std.debug;
 
 const ElementType = bson_types.BsonElementType;
 const BsonSubType = bson_types.BsonSubType;
-const BsonObjectIdError = bson_types.BsonObjectIdError;
 const BsonBinary = bson_types.BsonBinary;
 const BsonObjectId = bson_types.BsonObjectId;
 const BsonUtcDatetime = bson_types.BsonUtcDatetime;
@@ -312,7 +310,7 @@ test "write bson with binary" {
 
     const value = [_]u8{ 'h', 'e', 'l', 'l', 'o' };
     const doc = BinaryDocument{
-        .binary_data = BsonBinary.fromBytes(u8, &value, BsonSubType.generic),
+        .binary_data = BsonBinary.fromBytes(&value, BsonSubType.generic),
     };
 
     const bson_document = try BsonWriter.writeToBson(BinaryDocument, doc, arena_allocator);
@@ -753,7 +751,7 @@ test "write bson to json with binary subtype 0x00 (Zero-length) - /bson-corpus/t
     };
 
     const doc = DocumentStruct{
-        .x = BsonBinary.fromBytes(u8, &[0]u8{}, BsonSubType.generic),
+        .x = BsonBinary.fromBytes(&[0]u8{}, BsonSubType.generic),
     };
 
     const bson_document = try BsonWriter.writeToBson(DocumentStruct, doc, arena_allocator);
@@ -795,7 +793,7 @@ test "write bson to json with binary subtype 0x00 - /bson-corpus/tests/binary.js
     };
 
     const doc = DocumentStruct{
-        .x = BsonBinary.fromBytes(u8, &[_]u8{ 255, 255 }, BsonSubType.generic),
+        .x = BsonBinary.fromBytes(&[_]u8{ 255, 255 }, BsonSubType.generic),
     };
 
     const bson_document = try BsonWriter.writeToBson(DocumentStruct, doc, arena_allocator);
@@ -837,7 +835,7 @@ test "write bson to json with binary subtype 0x01 - /bson-corpus/tests/binary.js
     };
 
     const doc = DocumentStruct{
-        .x = BsonBinary.fromBytes(u8, &[_]u8{ 255, 255 }, BsonSubType.function),
+        .x = BsonBinary.fromBytes(&[_]u8{ 255, 255 }, BsonSubType.function),
     };
 
     const bson_document = try BsonWriter.writeToBson(DocumentStruct, doc, arena_allocator);
@@ -879,7 +877,7 @@ test "write bson to json with binary subtype 0x02 - /bson-corpus/tests/binary.js
     };
 
     const doc = DocumentStruct{
-        .x = BsonBinary.fromBytes(u8, &[_]u8{ 255, 255 }, BsonSubType.binary_old),
+        .x = BsonBinary.fromBytes(&[_]u8{ 255, 255 }, BsonSubType.binary_old),
     };
 
     const bson_document = try BsonWriter.writeToBson(DocumentStruct, doc, arena_allocator);
@@ -923,7 +921,7 @@ test "write bson to json with binary subtype 0x03 - /bson-corpus/tests/binary.js
     };
 
     const doc = DocumentStruct{
-        .x = BsonBinary.fromBytes(u8, &[_]u8{ 115, 255, 210, 100, 68, 179, 76, 105, 144, 232, 231, 209, 223, 192, 53, 212 }, BsonSubType.uuid_old),
+        .x = BsonBinary.fromBytes(&[_]u8{ 115, 255, 210, 100, 68, 179, 76, 105, 144, 232, 231, 209, 223, 192, 53, 212 }, BsonSubType.uuid_old),
     };
 
     const bson_document = try BsonWriter.writeToBson(DocumentStruct, doc, arena_allocator);
@@ -965,7 +963,7 @@ test "write bson to json with binary subtype 0x04 - /bson-corpus/tests/binary.js
     };
 
     const doc = DocumentStruct{
-        .x = BsonBinary.fromBytes(u8, &[_]u8{ 115, 255, 210, 100, 68, 179, 76, 105, 144, 232, 231, 209, 223, 192, 53, 212 }, BsonSubType.uuid),
+        .x = BsonBinary.fromBytes(&[_]u8{ 115, 255, 210, 100, 68, 179, 76, 105, 144, 232, 231, 209, 223, 192, 53, 212 }, BsonSubType.uuid),
     };
 
     const bson_document = try BsonWriter.writeToBson(DocumentStruct, doc, arena_allocator);
@@ -1007,7 +1005,7 @@ test "write bson to json with binary subtype 0x80 - /bson-corpus/tests/binary.js
     };
 
     const doc = DocumentStruct{
-        .x = BsonBinary.fromBytes(u8, &[_]u8{ 115, 255, 210, 100, 68, 179, 76, 105, 144, 232, 231, 209, 223, 192, 53, 212 }, BsonSubType.user_defined),
+        .x = BsonBinary.fromBytes(&[_]u8{ 115, 255, 210, 100, 68, 179, 76, 105, 144, 232, 231, 209, 223, 192, 53, 212 }, BsonSubType.user_defined),
     };
 
     const bson_document = try BsonWriter.writeToBson(DocumentStruct, doc, arena_allocator);

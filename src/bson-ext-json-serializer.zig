@@ -160,7 +160,7 @@ fn appendInt64ToJsonString(writer: *Writer, reader: *Reader, comptime is_strict_
 
 fn appendDecimal128ToJsonString(writer: *Writer, reader: *Reader) !void {
     try writer.writeAll("{\"$numberDecimal\":\"");
-    try Decimal128.readAndEncode(reader.adaptToOldInterface(), writer);
+    try Decimal128.readAndEncode(reader, writer);
     try writer.writeAll("\"}");
 }
 

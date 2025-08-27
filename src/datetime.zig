@@ -55,32 +55,32 @@ pub fn parseUtcDateTimeISO8601(date_time_string: []const u8) !i64 {
         @panic("year is not in range 1970-2100");
     }
 
-    const leap_kind: time.epoch.YearLeapKind = if (time.epoch.isLeapYear(year)) .leap else .not_leap;
-
-    days_total += calculateDaysUpToMonth(@as(time.epoch.Month, @enumFromInt(month)));
-    if (leap_kind == .leap and month > 2) {
-        days_total += 1;
-    }
+    days_total += calculateDaysUpToMonth(year, @as(time.epoch.Month, @enumFromInt(month)));
 
     result += days_total * 24 * 60 * 60;
 
     return result * 1000 + ms;
 }
 
-fn calculateDaysUpToMonth(month: time.epoch.Month) i64 {
+fn calculateDaysUpToMonth(year: time.epoch.Year, month: time.epoch.Month) i64 {
+    return calculateDaysUpToMonthInNonLeapYear(month) + @as(i64, @intFromBool(time.epoch.isLeapYear(year) and month.numeric() > 2));
+}
+
+fn calculateDaysUpToMonthInNonLeapYear(month: time.epoch.Month) i64 {
+    const non_leap_year = 1;
     return switch (month) {
         .jan => 0,
-        .feb => comptime time.epoch.getDaysInMonth(.not_leap, .jan) + calculateDaysUpToMonth(.jan),
-        .mar => comptime time.epoch.getDaysInMonth(.not_leap, .feb) + calculateDaysUpToMonth(.feb),
-        .apr => comptime time.epoch.getDaysInMonth(.not_leap, .mar) + calculateDaysUpToMonth(.mar),
-        .may => comptime time.epoch.getDaysInMonth(.not_leap, .apr) + calculateDaysUpToMonth(.apr),
-        .jun => comptime time.epoch.getDaysInMonth(.not_leap, .may) + calculateDaysUpToMonth(.may),
-        .jul => comptime time.epoch.getDaysInMonth(.not_leap, .jun) + calculateDaysUpToMonth(.jun),
-        .aug => comptime time.epoch.getDaysInMonth(.not_leap, .jul) + calculateDaysUpToMonth(.jul),
-        .sep => comptime time.epoch.getDaysInMonth(.not_leap, .aug) + calculateDaysUpToMonth(.aug),
-        .oct => comptime time.epoch.getDaysInMonth(.not_leap, .sep) + calculateDaysUpToMonth(.sep),
-        .nov => comptime time.epoch.getDaysInMonth(.not_leap, .oct) + calculateDaysUpToMonth(.oct),
-        .dec => comptime time.epoch.getDaysInMonth(.not_leap, .nov) + calculateDaysUpToMonth(.nov),
+        .feb => comptime time.epoch.getDaysInMonth(non_leap_year, .jan) + calculateDaysUpToMonthInNonLeapYear(.jan),
+        .mar => comptime time.epoch.getDaysInMonth(non_leap_year, .feb) + calculateDaysUpToMonthInNonLeapYear(.feb),
+        .apr => comptime time.epoch.getDaysInMonth(non_leap_year, .mar) + calculateDaysUpToMonthInNonLeapYear(.mar),
+        .may => comptime time.epoch.getDaysInMonth(non_leap_year, .apr) + calculateDaysUpToMonthInNonLeapYear(.apr),
+        .jun => comptime time.epoch.getDaysInMonth(non_leap_year, .may) + calculateDaysUpToMonthInNonLeapYear(.may),
+        .jul => comptime time.epoch.getDaysInMonth(non_leap_year, .jun) + calculateDaysUpToMonthInNonLeapYear(.jun),
+        .aug => comptime time.epoch.getDaysInMonth(non_leap_year, .jul) + calculateDaysUpToMonthInNonLeapYear(.jul),
+        .sep => comptime time.epoch.getDaysInMonth(non_leap_year, .aug) + calculateDaysUpToMonthInNonLeapYear(.aug),
+        .oct => comptime time.epoch.getDaysInMonth(non_leap_year, .sep) + calculateDaysUpToMonthInNonLeapYear(.sep),
+        .nov => comptime time.epoch.getDaysInMonth(non_leap_year, .oct) + calculateDaysUpToMonthInNonLeapYear(.oct),
+        .dec => comptime time.epoch.getDaysInMonth(non_leap_year, .nov) + calculateDaysUpToMonthInNonLeapYear(.nov),
     };
 }
 

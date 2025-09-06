@@ -78,6 +78,21 @@ pub const BsonDocumentView = struct {
         return false;
     }
 
+    pub fn checkElement(self: *const BsonDocumentView, key: []const u8, predicate: fn (element: *const BsonElement) anyerror!bool) !?bool {
+        var arena = std.heap.ArenaAllocator.init(self.allocator);
+        defer arena.deinit();
+        const arena_allocator = arena.allocator();
+
+        var it = BsonDocumentIterator.init(arena_allocator, self.document);
+        errdefer it.deinit();
+
+        const element = try it.findElement(key);
+        if (element) |e| {
+            return try predicate(e);
+        }
+        return null;
+    }
+
     pub fn isNullOrEmpty(self: *const BsonDocumentView, key: []const u8) !bool {
         var arena = std.heap.ArenaAllocator.init(self.allocator);
         defer arena.deinit();

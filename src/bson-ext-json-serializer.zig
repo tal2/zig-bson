@@ -241,6 +241,8 @@ fn appendRegexpToJsonString(writer: *Writer, reader: *Reader) !void {
     try std.json.Stringify.encodeJsonStringChars(pattern_bytes_slice, .{ .escape_unicode = true }, writer);
 
     try writer.writeAll("\",\"options\":\"");
+    const byte = try reader.takeByte();
+    assert(byte == 0);
     _ = try reader.streamDelimiterLimit(writer, 0x00, Limit.limited(5)); // TODO: handle error
     const last_byte = try reader.takeByte();
     assert(last_byte == 0);

@@ -15,7 +15,7 @@ pub inline fn assertIsNumber(comptime T: type) void {
     comptime std.debug.assert(T == i32 or T == u32 or T == i64 or T == u64 or T == i128 or T == u128 or T == usize or T == f32 or T == f64);
 }
 
-pub fn encodeFromReaderToWriter(encoder: *const std.base64.Base64Encoder, destWriter: *Writer, sourceReader: *Reader, limit: usize) !void {
+pub fn encodeFromReaderToWriter(encoder: *const std.base64.Base64Encoder, destWriter: *Writer, sourceReader: *Reader, limit: usize) (Writer.Error || Reader.Error)!void {
     var remaining = limit;
     while (remaining > 0) {
         if (remaining == 1) {

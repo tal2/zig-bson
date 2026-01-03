@@ -18,11 +18,13 @@ pub const NullIgnoredFieldNames = bson_writer.NullIgnoredFieldNames;
 pub const BsonDocumentIterator = bson_iterator.BsonDocumentIterator;
 pub const BsonDocumentView = @import("./document-view.zig").BsonDocumentView;
 
+pub const BsonDocumentReadError = (Allocator.Error || Reader.Error);
+
 pub const BsonDocument = struct {
     len: usize,
     raw_data: []const u8,
 
-    pub fn loadFromBytes(allocator: Allocator, raw_data: []const u8) !*BsonDocument {
+    pub fn loadFromBytes(allocator: Allocator, raw_data: []const u8) Allocator.Error!*BsonDocument {
         var document = try allocator.create(BsonDocument);
         errdefer document.deinit(allocator);
         document.len = raw_data.len;
@@ -30,7 +32,7 @@ pub const BsonDocument = struct {
         return document;
     }
 
-    pub fn readDocument(allocator: Allocator, reader: *Reader) !*BsonDocument {
+    pub fn readDocument(allocator: Allocator, reader: *Reader) BsonDocumentReadError!*BsonDocument {
         const document_len = try reader.takeInt(i32, .little);
         const size = @as(usize, @intCast(document_len));
 

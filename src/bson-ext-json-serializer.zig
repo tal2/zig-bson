@@ -5,6 +5,7 @@ const datetime = @import("datetime.zig");
 const Decimal128 = @import("binary_coded_decimal");
 const bson_types = @import("bson-types.zig");
 
+const Allocator = std.mem.Allocator;
 const ArrayWriter = std.ArrayList(u8).Writer;
 const Writer = std.io.Writer;
 const Reader = std.io.Reader;
@@ -23,7 +24,7 @@ pub const WriteJsonStringError = error{
 };
 pub const FloatFormatCanonicalExtendedJsonError = Writer.Error || std.fmt.float.Error || error{OutOfMemory};
 
-pub fn toJsonString(doc: *const bson.BsonDocument, allocator: std.mem.Allocator, comptime is_strict_ext_json: bool) ![]const u8 {
+pub fn toJsonString(doc: *const bson.BsonDocument, allocator: Allocator, comptime is_strict_ext_json: bool) ![]const u8 {
     var allocating_writer = try Writer.Allocating.initCapacity(allocator, 1024);
     errdefer allocating_writer.deinit();
 
@@ -70,7 +71,7 @@ pub fn appendDocumentToJsonString(reader: *Reader, writer: *Writer, comptime is_
     try skipDocumentTerminatingByte(reader);
 }
 
-fn appendENameToJsonString(writer: *Writer, reader: *Reader) !void {
+fn appendENameToJsonString(writer: *Writer, reader: *Reader) (Writer.Error || Reader.Error || Reader.StreamDelimiterLimitError)!void {
     try writer.writeByte('"');
     _ = try reader.streamDelimiterLimit(writer, 0x00, Limit.limited(1024)); // TODO: handle error
     const last_byte = try reader.takeByte();
@@ -128,7 +129,7 @@ fn appendArrayToJsonString(writer: *Writer, reader: *Reader, comptime is_strict_
     try writer.writeByte(']');
 }
 
-fn appendStringToJsonString(writer: *Writer, reader: *Reader) !void {
+fn appendStringToJsonString(writer: *Writer, reader: *Reader) (Reader.Error || Writer.Error)!void {
     const num = try reader.takeInt(i32, .little);
     const str_expected_len = @as(usize, @intCast(num));
     assert(str_expected_len > 0);
@@ -140,7 +141,7 @@ fn appendStringToJsonString(writer: *Writer, reader: *Reader) !void {
     try std.json.Stringify.encodeJsonString(str, .{ .escape_unicode = false }, writer);
 }
 
-fn appendInt32ToJsonString(writer: *Writer, reader: *Reader, comptime is_strict_ext_json: bool) !void {
+fn appendInt32ToJsonString(writer: *Writer, reader: *Reader, comptime is_strict_ext_json: bool) (Writer.Error || Reader.Error)!void {
     const num = try reader.takeInt(i32, .little);
     if (is_strict_ext_json) {
         try writer.print("{{\"$numberInt\":\"{d}\"}}", .{num});
@@ -149,7 +150,7 @@ fn appendInt32ToJsonString(writer: *Writer, reader: *Reader, comptime is_strict_
     }
 }
 
-fn appendInt64ToJsonString(writer: *Writer, reader: *Reader, comptime is_strict_ext_json: bool) !void {
+fn appendInt64ToJsonString(writer: *Writer, reader: *Reader, comptime is_strict_ext_json: bool) (Writer.Error || Reader.Error)!void {
     const num = try reader.takeInt(i64, .little);
     if (is_strict_ext_json) {
         try writer.print("{{\"$numberLong\":\"{d}\"}}", .{num});
@@ -158,13 +159,13 @@ fn appendInt64ToJsonString(writer: *Writer, reader: *Reader, comptime is_strict_
     }
 }
 
-fn appendDecimal128ToJsonString(writer: *Writer, reader: *Reader) !void {
+fn appendDecimal128ToJsonString(writer: *Writer, reader: *Reader) (Writer.Error || Reader.Error)!void {
     try writer.writeAll("{\"$numberDecimal\":\"");
     try Decimal128.readAndEncode(reader, writer);
     try writer.writeAll("\"}");
 }
 
-fn appendDoubleToJsonString(writer: *Writer, reader: *Reader, comptime is_strict_ext_json: bool) !void {
+fn appendDoubleToJsonString(writer: *Writer, reader: *Reader, comptime is_strict_ext_json: bool) (Reader.Error || FloatFormatCanonicalExtendedJsonError)!void {
     const num_bytes = try reader.take(@sizeOf(f64));
     const num = std.mem.bytesToValue(f64, num_bytes);
     if (is_strict_ext_json) {
@@ -225,7 +226,7 @@ fn writeFloatAsCanonicalExtendedJsonString(writer: *Writer, num: f64) FloatForma
     }
 }
 
-fn appendTimestampToJsonString(writer: *Writer, reader: *Reader) !void {
+fn appendTimestampToJsonString(writer: *Writer, reader: *Reader) (Writer.Error || Reader.Error)!void {
     const num = try reader.takeInt(u64, .little);
     const num_high = @as(u32, @intCast(num >> 32));
     const num_low = @as(u32, @truncate(num));
@@ -249,7 +250,7 @@ fn appendRegexpToJsonString(writer: *Writer, reader: *Reader) !void {
     try writer.writeAll("\"}}");
 }
 
-fn appendUtcDateTimeToJsonString(writer: *Writer, reader: *Reader, comptime is_strict_ext_json: bool) !void {
+fn appendUtcDateTimeToJsonString(writer: *Writer, reader: *Reader, comptime is_strict_ext_json: bool) (Writer.Error || Reader.Error || std.fmt.BufPrintError)!void {
     const num = try reader.takeInt(i64, .little);
     if (is_strict_ext_json or num < 0 or num >= datetime.DATETIME_MAX_I64) {
         try writer.print("{{\"$date\":{{\"$numberLong\":\"{d}\"}}}}", .{num});
@@ -260,7 +261,7 @@ fn appendUtcDateTimeToJsonString(writer: *Writer, reader: *Reader, comptime is_s
     }
 }
 
-fn appendBooleanToJsonString(writer: *Writer, reader: *Reader) !void {
+fn appendBooleanToJsonString(writer: *Writer, reader: *Reader) (WriteJsonStringError || Reader.Error || Writer.Error)!void {
     const num = try reader.takeByte();
     switch (num) {
         0 => try writer.writeAll("false"),
@@ -269,7 +270,7 @@ fn appendBooleanToJsonString(writer: *Writer, reader: *Reader) !void {
     }
 }
 
-inline fn appendNullToJsonString(writer: *Writer) !void {
+inline fn appendNullToJsonString(writer: *Writer) Writer.Error!void {
     try writer.writeAll("null");
 }
 
@@ -291,30 +292,30 @@ fn appendBinaryToJsonString(writer: *Writer, reader: *Reader) !void {
     try writer.print("\",\"subType\":\"{x:02}\"}}}}", .{sub_type_byte});
 }
 
-fn appendObjectIdToJsonString(writer: *Writer, reader: *Reader) !void {
+fn appendObjectIdToJsonString(writer: *Writer, reader: *Reader) (Writer.Error || Reader.Error)!void {
     const bytes_array = try reader.takeArray(12);
     const hex = std.fmt.bytesToHex(bytes_array, .lower);
 
     try writer.print("{{\"$oid\":\"{s}\"}}", .{hex});
 }
 
-fn appendMinKeyToJsonString(writer: *Writer) !void {
+fn appendMinKeyToJsonString(writer: *Writer) Writer.Error!void {
     try writer.writeAll("{\"$minKey\":1}");
 }
 
-fn appendMaxKeyToJsonString(writer: *Writer) !void {
+fn appendMaxKeyToJsonString(writer: *Writer) Writer.Error!void {
     try writer.writeAll("{\"$maxKey\":1}");
 }
 
-inline fn skipArrayItemName(reader: *Reader) !void {
+inline fn skipArrayItemName(reader: *Reader) Reader.Error!void {
     _ = try reader.discardDelimiterInclusive(0x00);
 }
 
-inline fn skipArrayTerminatingByte(reader: *Reader) !void {
+inline fn skipArrayTerminatingByte(reader: *Reader) Reader.Error!void {
     try skipDocumentTerminatingByte(reader);
 }
 
-inline fn skipDocumentTerminatingByte(reader: *Reader) !void {
+inline fn skipDocumentTerminatingByte(reader: *Reader) Reader.Error!void {
     const b = try reader.takeByte();
     assert(b == 0);
 }
